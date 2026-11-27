@@ -44,6 +44,25 @@ def achar_por_tel(b: Banco, tel: str) -> dict | None:
 
 
 # ---------------- envio ----------------
+def _norm(t: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", (t or "").lower()) if unicodedata.category(c) != "Mn").strip()
+
+
+def escolher_clinica(b: Banco, cliente: dict, cidade: str = "") -> int | None:
+    """Clínicas que listam o cliente; com mais de uma, a da cidade da pessoa; senão a clínica fixa do cliente."""
+    nome = _norm(cliente["nome"])
+    cands = [c for c in b.todos("SELECT * FROM clinicas ORDER BY id")
+             if nome in [_norm(x) for x in re.split(r"[,/;]", c.get("clientes") or "")]]
+    if cidade and len(cands) > 1:
+        mesma = [c for c in cands if _norm(cidade) in _norm(c["cidade"]) or _norm(c["cidade"]) in _norm(cidade)]
+        if mesma:
+            return mesma[0]["id"]
+    if cliente.get("clinica_id") and any(c["id"] == cliente["clinica_id"] for c in cands):
+        return cliente["clinica_id"]
+    return cands[0]["id"] if cands else cliente.get("clinica_id")
+
+
 def _ctx(b: Banco, cfg: dict, p: dict) -> dict:
     cl = b.cliente(p["cliente_id"]) if p.get("cliente_id") else None
     clin = b.um("SELECT * FROM clinicas WHERE id=?", p.get("clinica_id") or (cl or {}).get("clinica_id"))
@@ -65,6 +84,21 @@ def _lista(xs) -> str:
     return "\n".join(f"* {x}" for x in xs)
 
 
+def texto_inicial(cfg: dict, cl: dict, nome: str = "Maria", funcao: str = "") -> str:
+    """Monta a 1ª mensagem. Campo errado no texto do cliente ({nom}, chave solta) → ValueError claro."""
+    modelo = cl["textos"].get("inicial") or "Olá, {nome}! Aqui é o {assinatura}. Vamos começar sua admissão."
+    if not funcao:
+        modelo = modelo.replace(" de {funcao}", "")
+    try:
+        return modelo.format(nome=nome.split()[0].title(), funcao=funcao or "a vaga", assinatura=cfg["assinatura"],
+                             documentos=_lista(cl["documentos"]), documentos_filhos=_lista(cl["documentos_filhos"]),
+                             infos=_lista(i["rotulo"] for i in cl["infos"] if i["chave"] != "filhos_menores_14")
+                             + "\n* Você tem filhos menores de 14 anos? Quantos?")
+    except (KeyError, IndexError, ValueError) as e:
+        raise ValueError(f"o texto inicial do cliente {cl['nome']} tem um campo inválido ({e}). "
+                         "Use só {nome}, {funcao}, {assinatura}, {documentos}, {documentos_filhos}, {infos}.") from e
+
+
 def cadastrar(b: Banco, cfg: dict, nome: str, telefone: str, cliente_id: int, agora: datetime,
               funcao: str = "", cidade: str = "", vaga_id: int | None = None) -> dict:
     tel = norm_tel(telefone)
@@ -75,12 +109,15 @@ def cadastrar(b: Banco, cfg: dict, nome: str, telefone: str, cliente_id: int, ag
         raise ValueError("cliente não existe")
     if vaga_id:
         v = b.um("SELECT * FROM vagas WHERE id=?", vaga_id)
+        if not v or v["status"] != "aberta":
+            raise ValueError("a vaga escolhida não está aberta")
         funcao = funcao or v["funcao"]
         cidade = cidade or (v["cidade"] or "")
+    texto = texto_inicial(cfg, cl, nome, funcao)
     pid = b.exec("INSERT INTO pessoas (nome, telefone, jid, cliente_id, vaga_id, funcao, cidade, etapa, status, "
                  "aguardando, clinica_id, criado_em, atualizado_em) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                  nome.strip(), tel, f"{tel}@s.whatsapp.net", cliente_id, vaga_id, funcao, cidade, "documentos",
-                 "ativo", "pessoa", cl["clinica_id"], agora.isoformat(), agora.isoformat())
+                 "ativo", "pessoa", escolher_clinica(b, cl, cidade), agora.isoformat(), agora.isoformat())
     for d in cl["documentos"]:
         b.exec("INSERT INTO itens (pessoa_id, item, grupo) VALUES (?,?,?)", pid, d, "doc")
     for i in cl["infos"]:
@@ -88,19 +125,19 @@ def cadastrar(b: Banco, cfg: dict, nome: str, telefone: str, cliente_id: int, ag
     if vaga_id:
         checar_vaga(b, vaga_id)
     p = b.pessoa(pid)
-    modelo = cl["textos"].get("inicial") or "Olá, {nome}! Aqui é o {assinatura}. Vamos começar sua admissão."
-    texto = modelo.format(nome=nome.split()[0].title(), funcao=funcao or "a vaga", assinatura=cfg["assinatura"],
-                          documentos=_lista(cl["documentos"]), documentos_filhos=_lista(cl["documentos_filhos"]),
-                          infos=_lista(i["rotulo"] for i in cl["infos"] if i["chave"] != "filhos_menores_14")
-                          + "\n* Você tem filhos menores de 14 anos? Quantos?")
     enviar(b, cfg, p, texto, agora)
     b.log(pid, "cadastro", f"{nome} / {cl['nome']}")
     return b.pessoa(pid)
 
 
 # ---------------- pendências ----------------
+def opcional(i: dict) -> bool:
+    """Item com "(se ...)" no nome (ex.: Declaração escolar (se já estuda)) não trava a etapa."""
+    return "(se " in i["item"].lower()
+
+
 def pendentes(b: Banco, pid) -> list[dict]:
-    return [i for i in b.itens(pid) if i["status"] in ("pendente", "recusado")]
+    return [i for i in b.itens(pid) if i["status"] in ("pendente", "recusado") and not opcional(i)]
 
 
 def rotulo(i: dict) -> str:
@@ -118,7 +155,7 @@ def checar_documentos(b: Banco, cfg: dict, pid, agora: datetime) -> None:
     p = b.pessoa(pid)
     if p["etapa"] != "documentos":
         return
-    its = [i for i in b.itens(pid) if i["grupo"] in ("doc", "info", "filho_doc")]
+    its = [i for i in b.itens(pid) if i["grupo"] in ("doc", "info", "filho_doc") and not opcional(i)]
     if its and all(i["status"] == "aprovado" for i in its):
         _abrir_etapa(b, cfg, pid, "exame", agora)
         oferecer_exame(b, cfg, b.pessoa(pid), agora)
@@ -127,17 +164,44 @@ def checar_documentos(b: Banco, cfg: dict, pid, agora: datetime) -> None:
     b.atualizar(pid, aguardando="pessoa" if falta_pessoa else "equipe")
 
 
+def janela(clin: dict) -> str:
+    return clin.get("horario_texto") or f"das {clin['inicio']} às {clin['fim']}"
+
+
 def oferecer_exame(b: Banco, cfg: dict, p: dict, agora: datetime, prefixo: str = "") -> None:
     clin = _ctx(b, cfg, p)["clinica"]
     ops = regras.opcoes_exame(cfg, agora.date(), clin)
     b.marcar(p["id"], opcoes_exame=[d.isoformat() for d in ops])
-    local = f" na {clin['nome']} ({clin['endereco']}), das {clin['inicio']} às {clin['fim']}" if clin else ""
+    local = f" na {clin['nome']} ({clin['endereco']}), {janela(clin)}" if clin else ""
     txt = (prefixo + f"Seus documentos foram conferidos. Agora vamos agendar o seu exame médico admissional{local}. "
            f"Você pode ir {regras.fmt_data(ops[0])} ou {regras.fmt_data(ops[1])}? Qual dia fica melhor?")
     enviar(b, cfg, p, txt, agora)
 
 
 # ---------------- ações (fila de aprovação) ----------------
+def receber_arquivo(b: Banco, it: dict, arquivo: str, msg_id, agora: datetime) -> None:
+    """Frente e verso: a 2ª foto do mesmo item não apaga a 1ª (vai para arquivos_extra)."""
+    extra = json.loads(it.get("arquivos_extra") or "[]")
+    if it.get("arquivo") and it["status"] == "recebido" and it["arquivo"] != arquivo and it["arquivo"] not in extra:
+        extra.append(it["arquivo"])
+    elif it["status"] != "recebido":
+        extra = []
+    b.exec("UPDATE itens SET status='recebido', arquivo=?, msg_id=?, arquivos_extra=?, atualizado_em=? WHERE id=?",
+           arquivo, msg_id, json.dumps(extra), agora.isoformat(), it["id"])
+
+
+def usar_anexo(b: Banco, cfg: dict, pid, msg_id: int, item_id: int, agora: datetime) -> str:
+    """Equipe diz no painel: 'este anexo da conversa é o item X' → item aprovado."""
+    m = b.um("SELECT * FROM mensagens WHERE id=? AND pessoa_id=?", msg_id, pid)
+    it = b.item(item_id)
+    if not m or not m["arquivo"] or not it or it["pessoa_id"] != pid:
+        return "anexo ou item não encontrado"
+    receber_arquivo(b, it, m["arquivo"], m["id"], agora)
+    tipo = {"exame": "guia", "contrato": "contrato"}.get(it["grupo"], "documento")
+    aid = criar_acao(b, pid, tipo, {"item_id": it["id"]}, f"{it['item']} (marcado pela equipe)", agora)
+    return aprovar(b, cfg, aid, agora)
+
+
 def criar_acao(b: Banco, pid, tipo: str, payload: dict, resumo: str, agora: datetime) -> int:
     ja = b.um("SELECT id FROM acoes WHERE pessoa_id=? AND tipo=? AND status='pendente' AND payload=?",
               pid, tipo, json.dumps(payload, ensure_ascii=False, sort_keys=True))
@@ -165,6 +229,9 @@ def aprovar(b: Banco, cfg: dict, aid: int, agora: datetime, modo: str | None = N
         checar_documentos(b, cfg, pid, agora)
     elif a["tipo"] == "exame":
         d = date.fromisoformat(pl["data"])
+        if d <= agora.date():
+            recusar(b, cfg, aid, "a data já passou", agora)
+            return "a data do exame já passou: mandei novas opções à pessoa"
         clin = _ctx(b, cfg, p)["clinica"]
         _fechar_acao(b, aid, "aprovada", agora)
         b.atualizar(pid, exame_data=d.isoformat(), clinica_id=clin["id"] if clin else None)
@@ -172,9 +239,9 @@ def aprovar(b: Banco, cfg: dict, aid: int, agora: datetime, modo: str | None = N
         b.exec("INSERT OR IGNORE INTO itens (pessoa_id, item, grupo) VALUES (?,?,?)", pid, ITEM_GUIA, "exame")
         b.exec("UPDATE itens SET status='pendente', arquivo=NULL WHERE pessoa_id=? AND item=?", pid, ITEM_GUIA)
         amanha = d == agora.date() + timedelta(days=1)
-        b.marcar(pid, vespera=amanha, pos_exame=False)
+        b.marcar(pid, vespera=amanha or ultimo_dia_de_aviso(cfg, agora.date(), d), pos_exame=False)
         quando = "amanhã" if amanha else regras.fmt_data(d)
-        txt = (f"Seu exame admissional está agendado para {quando}, das {clin['inicio']} às {clin['fim']}.\n"
+        txt = (f"Seu exame admissional está agendado para {quando}, {janela(clin)}.\n"
                f"📌 Local do exame: {clin['endereco']}.\n⚠️ Importante: {clin['orientacoes']}") if clin else \
               f"Seu exame admissional está agendado para {quando}. A equipe vai te passar o local."
         enviar(b, cfg, b.pessoa(pid), txt, agora, pedido=False)
@@ -183,7 +250,9 @@ def aprovar(b: Banco, cfg: dict, aid: int, agora: datetime, modo: str | None = N
         _fechar_acao(b, aid, "aprovada", agora)
         if a["tipo"] == "guia":
             _abrir_etapa(b, cfg, pid, "contrato", agora, aguardando="equipe")
-            criar_acao(b, pid, "enviar_contrato", {}, "Escolha: contrato remoto (envia o PDF) ou presencial", agora)
+            cl = _ctx(b, cfg, p)["cliente"] or {}
+            padrao = {"presencial": " Padrão deste cliente: PRESENCIAL.", "remoto": " Padrão deste cliente: ONLINE (remoto)."}.get(cl.get("contrato_modo") or "", "")
+            criar_acao(b, pid, "enviar_contrato", {}, "Escolha: contrato remoto (envia o PDF) ou presencial." + padrao, agora)
             enviar(b, cfg, b.pessoa(pid), "Recebi a guia do exame, obrigado! Agora vamos para o contrato. "
                    "Em breve te passo as orientações.", agora, pedido=False)
         else:
@@ -301,6 +370,10 @@ def aplicar_resultado(b: Banco, cfg: dict, pid, res: dict, agora: datetime, nova
                 continue
             valor = str(n)
             cl = b.cliente(p["cliente_id"])
+            for x in b.todos("SELECT id, item FROM itens WHERE pessoa_id=? AND grupo='filho_doc' AND status='pendente'", pid):
+                m_ = re.match(r"Filho (\d+) –", x["item"])
+                if m_ and int(m_.group(1)) > n:
+                    b.exec("DELETE FROM itens WHERE id=?", x["id"])
             for f in range(1, n + 1):
                 for d in cl["documentos_filhos"]:
                     b.exec("INSERT OR IGNORE INTO itens (pessoa_id, item, grupo) VALUES (?,?,?)",
@@ -315,11 +388,11 @@ def aplicar_resultado(b: Banco, cfg: dict, pid, res: dict, agora: datetime, nova
             continue
         m = ids_validos.get(d.get("msg_id"))
         it = itens.get(d.get("item"))
+        it = b.item(it["id"]) if it else None  # estado atual (2ª foto do mesmo item no mesmo turno)
         if not m or not m.get("arquivo") or not it or it["grupo"] == "info" or it["status"] == "aprovado":
             b.log(pid, "documento_ignorado", json.dumps(d, ensure_ascii=False))
             continue
-        b.exec("UPDATE itens SET status='recebido', arquivo=?, msg_id=?, atualizado_em=? WHERE id=?",
-               m["arquivo"], m["id"], agora.isoformat(), it["id"])
+        receber_arquivo(b, it, m["arquivo"], m["id"], agora)
         tipo = {"exame": "guia", "contrato": "contrato"}.get(it["grupo"], "documento")
         criar_acao(b, pid, tipo, {"item_id": it["id"]}, f"{it['item']} (mensagem {m['id']})", agora)
         feito.append(f"documento {it['item']}")
@@ -330,7 +403,8 @@ def aplicar_resultado(b: Banco, cfg: dict, pid, res: dict, agora: datetime, nova
     if res.get("propor_exame") and p["etapa"] == "exame":
         d = regras.ler_data(str((res["propor_exame"] or {}).get("data", "")), hoje)
         if d and regras.data_exame_valida(cfg, hoje, d, clin):
-            criar_acao(b, pid, "exame", {"data": d.isoformat()}, f"Exame {regras.fmt_data(d)} em {clin['nome'] if clin else '?'}", agora)
+            aviso = " ⚠️ Esta clínica exige agendamento: agende com a clínica antes de aprovar." if clin and clin.get("agendamento") else ""
+            criar_acao(b, pid, "exame", {"data": d.isoformat()}, f"Exame {regras.fmt_data(d)} em {clin['nome'] if clin else '?'}.{aviso}", agora)
             b.atualizar(pid, aguardando="equipe")
             feito.append(f"exame proposto {d}")
         else:
@@ -408,7 +482,7 @@ def ligar_vaga(b: Banco, pid, vid: int | None) -> str:
 
 def estoque(b: Banco, cidade: str = "", funcao: str = "", completo: bool = False) -> list[dict]:
     ps = b.todos("SELECT p.*, c.nome cliente FROM pessoas p LEFT JOIN clientes c ON c.id=p.cliente_id "
-                 "WHERE p.vaga_id IS NULL AND p.status != 'desistiu' ORDER BY p.nome")
+                 "WHERE p.vaga_id IS NULL AND p.status != 'desistiu' AND p.cliente_id IS NOT NULL ORDER BY p.nome")
     out = []
     for p in ps:
         if cidade and cidade.lower() not in (p["cidade"] or "").lower():
@@ -426,6 +500,18 @@ def estoque(b: Banco, cidade: str = "", funcao: str = "", completo: bool = False
 # ---------------- relógio: cobranças, véspera, pós-exame ----------------
 def _ts(x) -> datetime | None:
     return datetime.fromisoformat(x) if x else None
+
+
+def ultimo_dia_de_aviso(cfg: dict, hoje: date, exame: date) -> bool:
+    """Hoje é o último dia com janela de envio antes do exame (sexta/sábado para exame na segunda)."""
+    if hoje >= exame:
+        return False
+    d = hoje + timedelta(days=1)
+    while d < exame:
+        if d.weekday() in cfg["janela_envio"]["dias"]:
+            return False
+        d += timedelta(days=1)
+    return True
 
 
 def texto_cobranca(b: Banco, p: dict, n: int) -> str:
@@ -463,15 +549,19 @@ def tick(b: Banco, cfg: dict, agora: datetime) -> list[str]:
             hv = regras._hm(cfg["exame"]["hora_vespera"])
             hp = regras._hm(cfg["exame"]["hora_pos_exame"])
             clin = _ctx(b, cfg, p)["clinica"]
-            if not p["marcas"].get("vespera") and agora.date() == d - timedelta(days=1) and agora.time() >= hv:
+            if not p["marcas"].get("vespera") and ultimo_dia_de_aviso(cfg, agora.date(), d) and agora.time() >= hv:
                 b.marcar(pid, vespera=True)
-                txt = (f"Olá! Passando para confirmar seu exame admissional amanhã, das {clin['inicio']} às {clin['fim']}.\n"
+                quando = "amanhã" if agora.date() == d - timedelta(days=1) else regras.fmt_data(d)
+                txt = (f"Olá! Passando para confirmar seu exame admissional {quando}, {janela(clin)}.\n"
                        f"📌 Local do exame: {clin['endereco']}.\n⚠️ Importante: {clin['orientacoes']}") if clin else \
-                      "Olá! Passando para confirmar seu exame admissional amanhã."
+                      f"Olá! Passando para confirmar seu exame admissional {quando}."
                 enviar(b, cfg, p, txt, agora, pedido=False)
                 feito.append(f"vespera {pid}")
             elif not p["marcas"].get("pos_exame") and agora.date() >= d and agora.time() >= hp:
                 b.marcar(pid, pos_exame=True)
+                guia = next((i for i in b.itens(pid) if i["item"] == ITEM_GUIA), None)
+                if guia and guia["status"] in ("recebido", "aprovado"):
+                    continue  # a guia já chegou: não pede de novo
                 b.atualizar(pid, aguardando="pessoa", cobrancas=0, ultima_cobranca=None)
                 enviar(b, cfg, b.pessoa(pid), "Oi! Conseguiu fazer o exame hoje? Se sim, me manda a foto da guia do exame. "
                        "Se não conseguiu ir, me avisa que a gente remarca.", agora)

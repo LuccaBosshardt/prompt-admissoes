@@ -310,8 +310,9 @@ def test_mensagem_repetida_nao_entra_duas_vezes(b, cfg, aerovip):
 
 # ---------- envio ----------
 def test_envio_ligado_uma_tentativa_e_erro_vai_para_humano(b, cfg, aerovip, monkeypatch):
+    import json as _j
     p = nova(b, cfg, aerovip)
-    cfg["chaves"]["envio_ligado"] = True
+    (Path(cfg["dados_dir"]) / "chaves.json").write_text(_j.dumps({"envio_ligado": True}))
     chamadas = []
 
     def falha(*a):

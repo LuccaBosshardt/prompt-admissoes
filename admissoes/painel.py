@@ -23,6 +23,11 @@ ARQ = Path(CFG["dados_dir"]) / "arquivos"
 T = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 T.env.globals.update(NOME_ETAPA=motor.NOME_ETAPA, TIPOS_ACAO=motor.TIPOS_ACAO, ETAPAS=motor.ETAPAS)
 T.env.filters["dt"] = lambda x: (x or "")[:16].replace("T", " ")
+ROTULO = {"aguardando": {"pessoa": "do candidato", "equipe": "da equipe", "exame": "do dia do exame", "nada": "—"},
+          "status": {"ativo": "com o robô", "humano": "precisa de humano", "admitida": "admitida", "desistiu": "desistiu"},
+          "item": {"pendente": "falta", "recebido": "chegou (aprovar)", "aprovado": "ok", "recusado": "pedido de novo"}}
+T.env.globals.update(ROTULO=ROTULO)
+T.env.filters["json"] = lambda x: json.loads(x or "[]")
 T.env.filters["dia"] = lambda x: regras.fmt_data(date.fromisoformat(x)) if x else ""
 
 app = FastAPI(title="Prompt Admissões", docs_url=None, redoc_url=None, openapi_url=None)
@@ -53,10 +58,10 @@ def _ir(seg: str, caminho: str, msg: str = "") -> RedirectResponse:
 def _r(req: Request, seg: str, nome: str, **ctx):
     cont = {
         "aprov": BANCO.um("SELECT COUNT(*) n FROM acoes WHERE status='pendente'")["n"],
-        "humano": BANCO.um("SELECT COUNT(*) n FROM pessoas WHERE status='humano'")["n"],
+        "humano": BANCO.um("SELECT COUNT(*) n FROM pessoas WHERE status='humano' OR msg_nova=1")["n"],
     }
     return T.TemplateResponse(req, nome, {"b": _base(seg), "cont": cont, "msg": req.query_params.get("msg", ""),
-                                          "envio_ligado": CFG["chaves"].get("envio_ligado"), **ctx})
+                                          "envio_ligado": config.chaves(CFG).get("envio_ligado"), **ctx})
 
 
 def _agora():
@@ -148,14 +153,21 @@ async def ficha_acao(seg: str, pid: int, op: str = Form(...), vaga_id: str = For
             msg = "Cadastre a pessoa com um cliente antes de devolver ao robô."
         else:
             motor.devolver_robo(BANCO, pid, agora)
+            BANCO.atualizar(pid, msg_nova=0)
     elif op == "desistiu":
         BANCO.atualizar(pid, status="desistiu", motivo_humano=texto or "desistiu")
         if p["vaga_id"]:
             motor.checar_vaga(BANCO, p["vaga_id"])
+    elif op == "lida":
+        BANCO.atualizar(pid, msg_nova=0)
+    elif op == "usar_anexo" and item_id and texto:
+        msg = motor.usar_anexo(BANCO, CFG, pid, int(texto), int(item_id), agora)
+        msg = "Anexo usado e item aprovado." if msg == "ok" else msg
     elif op == "mensagem" and texto.strip():
+        BANCO.atualizar(pid, msg_nova=0)
         whatsapp.enviar(CFG, BANCO, p, texto.strip())
         BANCO.exec("UPDATE mensagens SET quem='humano' WHERE id=(SELECT MAX(id) FROM mensagens WHERE pessoa_id=?)", pid)
-        msg = "Mensagem na caixa de saída." if not CFG["chaves"].get("envio_ligado") else "Mensagem enviada."
+        msg = "Mensagem na caixa de saída." if not config.chaves(CFG).get("envio_ligado") else "Mensagem enviada."
     elif op in ("item_ok", "item_arquivo") and item_id:
         caminho = None
         if arquivo is not None and arquivo.filename:
@@ -182,9 +194,24 @@ async def ficha_acao(seg: str, pid: int, op: str = Form(...), vaga_id: str = For
     return _ir(seg, f"/pessoas/{pid}", msg)
 
 
+@app.get("/p/{seg}/arquivo/extra/{oid}/{n}")
+def arquivo_extra(seg: str, oid: int, n: int):
+    _ok(seg)
+    it = BANCO.item(oid)
+    extra = json.loads((it or {}).get("arquivos_extra") or "[]")
+    if not it or n >= len(extra):
+        raise HTTPException(404)
+    p = Path(extra[n]).resolve()
+    if ARQ.resolve() not in p.parents or not p.exists():
+        raise HTTPException(404)
+    return FileResponse(p)
+
+
 @app.get("/p/{seg}/arquivo/{tipo}/{oid}")
 def arquivo(seg: str, tipo: str, oid: int):
     _ok(seg)
+    if tipo == "extra":  # /arquivo/extra/<item_id>?n=0
+        raise HTTPException(404)
     r = BANCO.um("SELECT arquivo FROM itens WHERE id=?", oid) if tipo == "item" else \
         BANCO.um("SELECT arquivo FROM mensagens WHERE id=?", oid) if tipo == "msg" else \
         BANCO.um("SELECT contrato_pdf arquivo FROM clientes WHERE id=?", oid) if tipo == "contrato" else None
@@ -225,7 +252,7 @@ def decidir(seg: str, aid: int, decisao: str = Form(...), motivo: str = Form("")
 def fila_humano(req: Request, seg: str):
     _ok(seg)
     lista = BANCO.todos("SELECT p.*, c.nome cliente FROM pessoas p LEFT JOIN clientes c ON c.id=p.cliente_id "
-                        "WHERE p.status='humano' ORDER BY p.atualizado_em DESC")
+                        "WHERE p.status='humano' OR p.msg_nova=1 ORDER BY p.atualizado_em DESC")
     return _r(req, seg, "humano.html", lista=lista)
 
 
@@ -280,7 +307,7 @@ def clientes(req: Request, seg: str, id: int | None = None):
 
 @app.post("/p/{seg}/clientes/{cid}")
 async def cliente_salvar(seg: str, cid: int, nome: str = Form(...), documentos: str = Form(""), documentos_filhos: str = Form(""),
-                         infos: str = Form(""), clinica_id: str = Form(""), texto_inicial: str = Form(""),
+                         infos: str = Form(""), clinica_id: str = Form(""), texto_inicial: str = Form(""), contrato_modo: str = Form(""),
                          contrato: UploadFile | None = File(None)):
     _ok(seg)
     linhas = lambda t: [x.strip() for x in t.splitlines() if x.strip()]  # noqa: E731
@@ -289,11 +316,17 @@ async def cliente_salvar(seg: str, cid: int, nome: str = Form(...), documentos: 
         chave, _, rot = ln.partition("|")
         if chave.strip():
             inf.append({"chave": chave.strip(), "rotulo": (rot or chave).strip()})
+    try:
+        motor.texto_inicial(CFG, {"nome": nome, "textos": {"inicial": texto_inicial}, "documentos": [], "documentos_filhos": [],
+                                  "infos": inf})
+    except ValueError as e:
+        return _ir(seg, f"/clientes?id={cid}", f"Não salvei: {e}")
     if not any(i["chave"] == "filhos_menores_14" for i in inf):
         inf.append({"chave": "filhos_menores_14", "rotulo": "Quantos filhos menores de 14 anos (0 se não tem)"})
     BANCO.exec("UPDATE clientes SET nome=?, documentos=?, documentos_filhos=?, infos=?, clinica_id=?, textos=json_set(textos, '$.inicial', ?) WHERE id=?",
                nome.strip(), json.dumps(linhas(documentos), ensure_ascii=False), json.dumps(linhas(documentos_filhos), ensure_ascii=False),
                json.dumps(inf, ensure_ascii=False), int(clinica_id) if clinica_id else None, texto_inicial, cid)
+    BANCO.exec("UPDATE clientes SET contrato_modo=? WHERE id=?", contrato_modo if contrato_modo in ("presencial", "remoto") else "", cid)
     if contrato is not None and contrato.filename:
         if not contrato.filename.lower().endswith(".pdf"):
             return _ir(seg, f"/clientes?id={cid}", "O contrato precisa ser PDF.")

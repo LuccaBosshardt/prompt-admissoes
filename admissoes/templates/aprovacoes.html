@@ -2,6 +2,7 @@
 <h1>Aprovações</h1><p class="sub">O robô propõe; a equipe decide. Recusar um documento manda o motivo para a pessoa e pede de novo.</p>
 {% for a in lista %}<div class="card"><b><a href="{{b}}/pessoas/{{a.pessoa_id}}">{{a.nome}}</a></b> · {{a.cliente or ""}} · <span class="tag">{{TIPOS_ACAO.get(a.tipo,a.tipo)}}</span> <span class="sub">{{a.criado_em|dt}}</span>
 <p>{{a.resumo}}</p>
+{% if a.item %}{% for x in (a.item.arquivos_extra|json) %}<a href="{{b}}/arquivo/extra/{{a.item.id}}/{{loop.index0}}" target="_blank">{% if x.lower().endswith(('.jpg','.jpeg','.png','.webp')) %}<img class="doc" src="{{b}}/arquivo/extra/{{a.item.id}}/{{loop.index0}}">{% else %}📎 arquivo {{loop.index}}{% endif %}</a> {% endfor %}{% endif %}
 {% if a.item and a.item.arquivo %}<a href="{{b}}/arquivo/item/{{a.item.id}}" target="_blank">{% if a.item.arquivo.lower().endswith(('.jpg','.jpeg','.png','.webp')) %}<img class="doc" src="{{b}}/arquivo/item/{{a.item.id}}">{% else %}📎 abrir arquivo{% endif %}</a>{% endif %}
 <form method="post" action="{{b}}/aprovacoes/{{a.id}}" class="linha" style="margin-top:8px">
 {% if a.tipo=='enviar_contrato' %}<input type="hidden" name="decisao" value="aprovar"><button class="ok" name="modo" value="remoto">Enviar contrato (remoto)</button><button class="ok" name="modo" value="presencial">Assinatura presencial</button>

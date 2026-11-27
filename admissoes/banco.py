@@ -47,6 +47,16 @@ CREATE TABLE IF NOT EXISTS saida (
 CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY, pessoa_id INTEGER, tipo TEXT, detalhe TEXT, em TEXT);
 """
 
+# colunas acrescentadas depois da V1 (ALTER idempotente)
+MIGRACOES = [
+    "ALTER TABLE clinicas ADD COLUMN agendamento INTEGER DEFAULT 0",
+    "ALTER TABLE clinicas ADD COLUMN obs_interna TEXT DEFAULT ''",
+    "ALTER TABLE clinicas ADD COLUMN horario_texto TEXT DEFAULT ''",
+    "ALTER TABLE clientes ADD COLUMN contrato_modo TEXT DEFAULT ''",
+    "ALTER TABLE itens ADD COLUMN arquivos_extra TEXT DEFAULT '[]'",
+    "ALTER TABLE pessoas ADD COLUMN msg_nova INTEGER DEFAULT 0",
+]
+
 DOCS_AEROVIP = ["RG ou CNH", "CPF", "PIS", "Carteira de Trabalho (frente e verso ou digital)",
                 "Comprovante de residência"]
 DOCS_FILHOS_AEROVIP = ["Certidão de nascimento ou RG", "CPF", "Carteira de vacinação",
@@ -93,6 +103,11 @@ class Banco:
         Path(caminho).parent.mkdir(parents=True, exist_ok=True)
         with self.con() as c:
             c.executescript(ESQUEMA)
+            for m in MIGRACOES:
+                try:
+                    c.execute(m)
+                except sqlite3.OperationalError:
+                    pass  # coluna já existe
         self.semear()
 
     @contextmanager
@@ -131,8 +146,8 @@ class Banco:
         if not self.um("SELECT id FROM clinicas WHERE chave='padrao-aerovip'"):
             self.exec("INSERT INTO clinicas (nome, cidade, endereco, dias, inicio, fim, orientacoes, clientes, origem, chave)"
                       " VALUES (?,?,?,?,?,?,?,?,?,?)",
-                      "Clínica Aerovip (Cumbica)", "Guarulhos",
-                      "Rua Abaiara, 194 – Cidade Jardim Cumbica – Guarulhos/SP", "0,1,2,3,4", "08:00", "11:30",
+                      "PRESET (Guarulhos)", "Guarulhos",
+                      "Rua Abaiara, 194 – Cidade Jardim Cumbica – Guarulhos/SP", "0,1,2,3,4", "08:00", "12:00",
                       "Não esqueça de levar seu RG (documento de identidade). Ao chegar ao local, nos avise por aqui.",
                       "Aerovip", "padrao", "padrao-aerovip")
         if not self.um("SELECT id FROM clientes WHERE nome='Aerovip'"):

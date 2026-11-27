@@ -30,12 +30,15 @@ def evento(b: Banco, cfg: dict, p: dict, novas: list[dict], agora: datetime) -> 
         "opcoes_exame": p["marcas"].get("opcoes_exame", []) if p["etapa"] == "exame" else [],
         "exame": {"data": p["exame_data"], "clinica": clin["nome"] if clin else None,
                   "endereco": clin["endereco"] if clin else None,
-                  "janela": f"{clin['inicio']}–{clin['fim']}" if clin else None} if p["exame_data"] else None,
+                  "janela": motor.janela(clin) if clin else None,
+                  "orientacoes": clin["orientacoes"] if clin else None} if p["exame_data"] else None,
         "aguardando_equipe": [a["resumo"] for a in b.todos(
             "SELECT resumo FROM acoes WHERE pessoa_id=? AND status='pendente'", p["id"])],
         "historico": [{"id": m["id"], "quem": m["quem"], "texto": (m["texto"] or "")[:600],
                        "anexo": bool(m["tem_arquivo"])} for m in hist if m["id"] not in {n["id"] for n in novas}],
-        "novas_mensagens": [{"msg_id": m["id"], "tipo": m["tipo"], "texto": m["texto"] or "",
+        "novas_mensagens": [{"msg_id": m["id"], "tipo": m["tipo"],
+                             "texto": (m["texto"] or "") if (m["tipo"] or "").upper() not in ("AUDIO", "PTT") else
+                             "[ÁUDIO: o sistema não ouve áudio]",
                              "anexo": bool(m["arquivo"])} for m in novas],
     }
 
@@ -53,12 +56,21 @@ def processar(b: Banco, cfg: dict, pid: int, agora: datetime, responder=agente.r
     ev = evento(b, cfg, p, novas, agora)
     try:
         res = responder(ev, cfg)
+        if not isinstance(res, dict):
+            raise agente.HermesFalhou("resposta não é objeto")
     except agente.HermesFalhou as e:
         b.log(pid, "erro_hermes", str(e))
         motor.humano(b, pid, f"erro técnico no agente: {str(e)[:120]}")
         return "erro hermes"
     b.log(pid, "hermes", f"resumo={res.get('resumo', '')}")
+    etapa_antes = p["etapa"]
     feito = motor.aplicar_resultado(b, cfg, pid, res, agora, novas)
+    depois = b.pessoa(pid)
+    if depois["etapa"] != etapa_antes or depois["status"] != "ativo" and not res.get("precisa_humano"):
+        # o sistema já mandou a mensagem da nova etapa; a resposta do Hermes foi feita com o estado velho
+        b.log(pid, "hermes_descartado", "etapa mudou no turno: " + " | ".join(motor._msgs_limpas(res.get("mensagens")))[:300])
+        b.log(pid, "turno", "; ".join(feito) or "só conversa")
+        return "ok"
     for t in motor._msgs_limpas(res.get("mensagens")):
         motor.enviar(b, cfg, b.pessoa(pid), t, agora, pedido=b.pessoa(pid)["aguardando"] == "pessoa")
     b.log(pid, "turno", "; ".join(feito) or "só conversa")
@@ -83,8 +95,11 @@ def receber(b: Banco, cfg: dict, tel: str, jid: str, nome_wa: str, texto: str, t
         return "sem cadastro"
     if jid and p["jid"] != jid:
         b.atualizar(p["id"], jid=jid)  # o WhatsApp manda o JID real (com ou sem o 9)
+    com_robo = p["status"] == "ativo" and not (p["pausa_ate"] and datetime.fromisoformat(p["pausa_ate"]) > agora)
     b.exec("INSERT INTO mensagens (pessoa_id, telefone, quem, texto, tipo, arquivo, key_id, processada, em) "
            "VALUES (?,?,?,?,?,?,?,?,?)", p["id"], tel, "pessoa", texto, tipo, arquivo, key_id,
-           0 if p["status"] == "ativo" else 1, agora.isoformat())
-    b.atualizar(p["id"], ultima_msg_pessoa=agora.isoformat())
+           0 if com_robo else 1, agora.isoformat())
+    b.atualizar(p["id"], ultima_msg_pessoa=agora.isoformat(), **({} if com_robo else {"msg_nova": 1}))
+    if not com_robo:
+        b.log(p["id"], "msg_nova", "mensagem de quem não está com o robô: vai para a equipe")
     return "ok"

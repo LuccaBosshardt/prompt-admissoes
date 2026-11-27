@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 
 from .banco import agora_txt
-from .config import ler_chave
+from .config import chaves, ler_chave
 
 
 def _chave(cfg: dict) -> str:
@@ -57,7 +57,7 @@ def enviar(cfg: dict, banco, pessoa: dict, texto: str, arquivo: str | None = Non
     banco.exec("INSERT INTO mensagens (pessoa_id, telefone, quem, texto, tipo, arquivo, processada, em) "
                "VALUES (?,?,?,?,?,?,1,?)", pessoa["id"], pessoa["telefone"], "sistema", texto,
                "DOCUMENT" if arquivo else "TEXT", arquivo, agora_txt())
-    if not cfg["chaves"].get("envio_ligado"):
+    if not chaves(cfg).get("envio_ligado"):
         banco.log(pessoa["id"], "seco", f"saida {sid}: {texto[:200]}")
         return banco.um("SELECT * FROM saida WHERE id=?", sid)
     try:

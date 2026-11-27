@@ -1,17 +1,19 @@
 {% extends "base.html" %}{% block corpo %}
-<h1>{{p.nome}} <span class="tag">{{NOME_ETAPA.get(p.etapa,p.etapa)}}</span> <span class="tag {% if p.status=='humano' %}er{% elif p.status=='admitida' %}ok{% endif %}">{{p.status}}</span></h1>
-<p class="sub">{{p.telefone}} · {{cliente.nome if cliente else "sem cliente"}} · {{p.funcao or ""}} {{p.cidade or ""}} · vez de: <b>{{p.aguardando}}</b> · cobranças {{p.cobrancas}}/3{% if p.faltas %} · faltas no exame {{p.faltas}}{% endif %}
+<h1>{{p.nome}} <span class="tag">{{NOME_ETAPA.get(p.etapa,p.etapa)}}</span> <span class="tag {% if p.status=='humano' %}er{% elif p.status=='admitida' %}ok{% endif %}">{{ROTULO.status.get(p.status,p.status)}}</span></h1>
+<p class="sub">{{p.telefone}} · {{cliente.nome if cliente else "sem cliente"}} · {{p.funcao or ""}} {{p.cidade or ""}} · a vez é <b>{{ROTULO.aguardando.get(p.aguardando,p.aguardando)}}</b> · cobranças sem resposta nesta etapa: {{p.cobrancas}} de 3{% if p.faltas %} · faltas no exame {{p.faltas}}{% endif %}
 {% if p.pausa_ate %} · robô pausado até {{p.pausa_ate|dt}}{% endif %}</p>
 {% if p.status=='humano' %}<div class="aviso">Precisa de humano: {{p.motivo_humano}}</div>{% endif %}
+{% if p.msg_nova %}<div class="aviso">A pessoa mandou mensagem e o robô não responde ({{ROTULO.status.get(p.status,p.status)}}). Responda abaixo ou <form method="post" action="{{b}}/pessoas/{{p.id}}/acao" style="display:inline"><button class="sec" name="op" value="lida">marcar como vista</button></form></div>{% endif %}
 <div class="cols"><div>
 <div class="card"><h2 style="margin-top:0">Checklist</h2>
-<table><tr><th>Item</th><th>Situação</th><th>Valor / arquivo</th><th></th></tr>
-{% for i in itens %}<tr><td>{{i.obs if i.grupo=='info' and i.obs else i.item}}</td><td><span class="tag st-{{i.status}}">{{i.status}}</span>{% if i.status=='recusado' and i.grupo!='info' %}<div class="sub">{{i.obs}}</div>{% endif %}</td>
-<td>{% if i.valor %}{{i.valor}}{% endif %}{% if i.arquivo %}<a href="{{b}}/arquivo/item/{{i.id}}" target="_blank">ver arquivo</a>{% endif %}</td>
-<td>{% if i.status!='aprovado' %}<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" enctype="multipart/form-data" class="linha"><input type="hidden" name="op" value="item_ok"><input type="hidden" name="item_id" value="{{i.id}}">{% if i.grupo!='info' %}<input type="file" name="arquivo" style="max-width:150px">{% endif %}<button class="sec" title="A equipe recebeu por fora e aprova">Aprovar</button></form>{% endif %}</td></tr>{% endfor %}
-</table>
+<div style="overflow-x:auto"><table><tr><th>Item</th><th>Situação</th><th>Valor / arquivo</th><th></th></tr>
+{% for i in itens %}<tr><td>{{i.obs if i.grupo=='info' and i.obs else i.item}}</td><td><span class="tag st-{{i.status}}">{{ROTULO.item.get(i.status,i.status)}}</span>{% if '(se ' in i.item.lower() %}<div class="sub">opcional</div>{% endif %}{% if i.status=='recusado' and i.grupo!='info' %}<div class="sub">{{i.obs}}</div>{% endif %}</td>
+<td>{% if i.valor %}{{i.valor}}{% endif %}{% if i.arquivo %}<a href="{{b}}/arquivo/item/{{i.id}}" target="_blank">ver arquivo</a>{% endif %}{% for x in (i.arquivos_extra|json) %} · <a href="{{b}}/arquivo/extra/{{i.id}}/{{loop.index0}}" target="_blank">arquivo {{loop.index+1}}</a>{% endfor %}</td>
+<td>{% if i.status!='aprovado' %}<details><summary class="sub" style="cursor:pointer">Aprovar por fora</summary><form method="post" action="{{b}}/pessoas/{{p.id}}/acao" enctype="multipart/form-data" style="margin-top:6px"><input type="hidden" name="op" value="item_ok"><input type="hidden" name="item_id" value="{{i.id}}">{% if i.grupo!='info' %}<input type="file" name="arquivo" style="max-width:190px;font-size:12px"><br>{% endif %}<button class="sec" style="margin-top:4px" onclick="return confirm('Aprovar este item sem passar pelo robô?')">Aprovar</button></form></details>{% endif %}</td></tr>{% endfor %}
+</table></div>
 {% if p.exame_data %}<p><b>Exame:</b> {{p.exame_data|dia}} {% if clinica %}· {{clinica.nome}} · {{clinica.endereco}} · {{clinica.inicio}}–{{clinica.fim}}{% endif %}</p>{% endif %}
 {% if p.data_inicio %}<p><b>Início:</b> {{p.data_inicio|dia}}</p>{% endif %}
+{% if p.etapa=='contrato' %}<p class="sub">Contrato: 1) em Aprovações, escolha "remoto" (o robô manda o PDF e espera a foto assinada) ou "presencial" (a pessoa assina na unidade); 2) no presencial, depois da assinatura, clique em "Contrato assinado na unidade". Em seguida o robô pede a data de início.</p>{% endif %}
 {% if p.etapa=='contrato' and p.contrato_modo=='presencial' %}<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" enctype="multipart/form-data" class="linha"><input type="hidden" name="op" value="contrato_presencial"><label>Foto do contrato assinado<input type="file" name="arquivo"></label><button class="ok">Contrato assinado na unidade</button></form>{% endif %}
 </div>
 <div class="card"><h2 style="margin-top:0">Aprovações desta pessoa</h2>
@@ -30,7 +32,8 @@
 {% if p.status!='desistiu' %}<button name="op" value="desistiu" class="no" onclick="return confirm('Marcar como desistiu?')">Desistiu</button>{% endif %}</form>
 </div></div>
 <div><div class="card"><h2 style="margin-top:0">Conversa</h2><div class="chat">
-{% for m in msgs %}<div class="m {{m.quem}}">{{m.texto or ""}}{% if m.arquivo %}<br>{% if m.tipo=='IMAGE' %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank"><img class="doc" src="{{b}}/arquivo/msg/{{m.id}}"></a>{% else %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank">📎 anexo</a>{% endif %}{% endif %}<small>{{m.quem}} · {{m.em|dt}}</small></div>{% else %}<p class="sub">Sem mensagens.</p>{% endfor %}
+{% for m in msgs %}<div class="m {{m.quem}}">{{m.texto or ""}}{% if m.arquivo %}<br>{% if m.tipo=='IMAGE' %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank"><img class="doc" src="{{b}}/arquivo/msg/{{m.id}}"></a>{% else %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank">📎 anexo</a>{% endif %}
+{% if m.quem=='pessoa' %}<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" class="linha" style="margin-top:4px"><input type="hidden" name="op" value="usar_anexo"><input type="hidden" name="texto" value="{{m.id}}"><select name="item_id" style="font-size:12px;max-width:190px"><option value="">usar como…</option>{% for i in itens if i.grupo!='info' and i.status!='aprovado' %}<option value="{{i.id}}">{{i.item}}</option>{% endfor %}</select><button class="sec" style="padding:4px 8px;font-size:12px">Aprovar como este</button></form>{% endif %}{% endif %}<small>{{m.quem}} · {{m.em|dt}}</small></div>{% else %}<p class="sub">Sem mensagens.</p>{% endfor %}
 </div></div>
 <div class="card"><h2 style="margin-top:0">Registro</h2>{% for l in log %}<div class="sub">{{l.em|dt}} · <b>{{l.tipo}}</b> {{l.detalhe[:160]}}</div>{% endfor %}</div></div></div>
 {% endblock %}

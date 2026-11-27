@@ -52,5 +52,11 @@ T5. Ligar o envio: em chaves.json, `"envio_ligado": true`. Desligar = voltar par
 - Modelo do contrato (PDF): suba em Clientes → Aerovip. Sem PDF o painel não deixa liberar contrato remoto (presencial funciona).
 - Planilha de vagas e de admissões: só modelo (decisão: não importar dados antigos). Hoje as vagas entram pelo painel.
 
+## Antes de ligar o envio
+- Cadastros feitos em modo seco NÃO recebem a mensagem inicial depois (ela ficou na Caixa de saída). Reenvie pela ficha ("Mandar mensagem da equipe") ou recadastre.
+- O WA-AKG não confere se o número tem WhatsApp antes de enviar. Erro de envio vai para "Precisa de humano".
+- Clínicas (documento do Fabio, 27/11): PRESET usa o endereço da mensagem do DP (Rua Abaiara, 194), porque o documento não traz endereço; D2 está sem horário (marcada "exige agendamento"). Confirmar com o Fabio.
+- Carregar/atualizar clínicas por documento: `.venv/bin/python scripts/carregar_clinicas.py /srv/prompt-admissoes-dados/clinicas-AAAA-MM-DD.json`.
+
 ## Parar tudo
 `systemctl stop prompt-admissoes-ponte` (o robô para de ler e de cobrar). Painel: `systemctl stop prompt-admissoes-painel`.

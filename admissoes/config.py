@@ -29,6 +29,19 @@ def carregar() -> dict:
     return cfg
 
 
+def chaves(cfg: dict) -> dict:
+    """Relê dados_dir/chaves.json (liga/desliga vale na hora, no painel e na ponte)."""
+    out = dict(CHAVES_PADRAO)
+    out.update(cfg.get("chaves") or {})
+    cp = Path(cfg["dados_dir"]) / "chaves.json"
+    try:
+        out.update(json.loads(cp.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        pass
+    cfg["chaves"] = out
+    return out
+
+
 def segredo(cfg: dict, nome: str) -> str:
     """Lê (ou cria, ≥32 chars aleatórios, chmod 600) um segredo em dados_dir. Nunca imprime."""
     p = Path(cfg["dados_dir"]) / f"{nome}.txt"

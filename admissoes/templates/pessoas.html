@@ -14,10 +14,10 @@
 <label>Etapa<select name="etapa"><option value="">todas</option>{% for e in ETAPAS %}<option value="{{e}}" {% if f.etapa==e %}selected{% endif %}>{{NOME_ETAPA[e]}}</option>{% endfor %}</select></label>
 <label>Situação<select name="status"><option value="">todas</option>{% for s in ["ativo","humano","admitida","desistiu"] %}<option {% if f.status==s %}selected{% endif %}>{{s}}</option>{% endfor %}</select></label>
 <button class="sec">Filtrar</button></form>
-<table><tr><th>Nome</th><th>Cliente / vaga</th><th>Etapa</th><th>Vez de</th><th>Cobranças</th><th>Situação</th><th>Atualizado</th></tr>
+<div style="overflow-x:auto"><table><tr><th>Nome</th><th>Cliente / vaga</th><th>Etapa</th><th>A vez é</th><th>Cobranças</th><th>Situação</th><th>Atualizado</th></tr>
 {% for p in lista %}<tr><td><a href="{{b}}/pessoas/{{p.id}}">{{p.nome}}</a><div class="sub">{{p.telefone}}</div></td>
 <td>{{p.cliente or "—"}}<div class="sub">{{p.vaga_funcao or p.funcao or ""}}</div></td>
-<td><span class="tag">{{NOME_ETAPA.get(p.etapa,p.etapa)}}</span></td><td>{{p.aguardando}}</td><td>{{p.cobrancas}}/3</td>
-<td><span class="tag {% if p.status=='humano' %}er{% elif p.status=='admitida' %}ok{% endif %}">{{p.status}}</span></td><td class="sub">{{p.atualizado_em|dt}}</td></tr>
-{% else %}<tr><td colspan="7" class="sub">Ninguém cadastrado ainda.</td></tr>{% endfor %}</table>
+<td><span class="tag">{{NOME_ETAPA.get(p.etapa,p.etapa)}}</span></td><td>{{ROTULO.aguardando.get(p.aguardando,p.aguardando)}}</td><td>{{p.cobrancas}} de 3</td>
+<td><span class="tag {% if p.status=='humano' %}er{% elif p.status=='admitida' %}ok{% endif %}">{{ROTULO.status.get(p.status,p.status)}}</span></td><td class="sub">{{p.atualizado_em|dt}}</td></tr>
+{% else %}<tr><td colspan="7" class="sub">Ninguém cadastrado ainda.</td></tr>{% endfor %}</table></div>
 {% endblock %}

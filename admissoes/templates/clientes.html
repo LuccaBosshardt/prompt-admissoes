@@ -8,15 +8,17 @@
 <p><label>Documentos de cada filho menor de 14 (um por linha)<textarea name="documentos_filhos">{{atual.documentos_filhos|join("\n")}}</textarea></label></p>
 <p><label>Informações (uma por linha: <code>chave|texto que a pessoa vê</code>)<textarea name="infos">{% for i in atual.infos %}{{i.chave}}|{{i.rotulo}}
 {% endfor %}</textarea></label></p></div>
-<div><p><label>Clínica do exame<br><select name="clinica_id"><option value="">—</option>{% for c in clinicas %}<option value="{{c.id}}" {% if c.id==atual.clinica_id %}selected{% endif %}>{{c.nome}} · {{c.cidade}}</option>{% endfor %}</select></label></p>
+<div><p class="sub">A clínica da pessoa sai da coluna "clientes" da lista de clínicas (com mais de uma, vale a da cidade da pessoa). O campo abaixo é a reserva.</p>
+<p><label>Clínica do exame (reserva)<br><select name="clinica_id"><option value="">—</option>{% for c in clinicas %}<option value="{{c.id}}" {% if c.id==atual.clinica_id %}selected{% endif %}>{{c.nome}} · {{c.cidade}}</option>{% endfor %}</select></label></p>
 <p><label>Texto inicial (use {nome}, {funcao}, {assinatura}, {documentos}, {documentos_filhos}, {infos})<textarea name="texto_inicial" style="min-height:300px">{{atual.textos.get("inicial","")}}</textarea></label></p>
+<p><label>Contrato padrão deste cliente<br><select name="contrato_modo">{% for v,t in [("","a equipe escolhe"),("presencial","presencial (assina na unidade)"),("remoto","online (envia o PDF)")] %}<option value="{{v}}" {% if (atual.contrato_modo or "")==v %}selected{% endif %}>{{t}}</option>{% endfor %}</select></label></p>
 <p><label>Modelo do contrato (PDF){% if atual.contrato_pdf %} · <a href="{{b}}/arquivo/contrato/{{atual.id}}" target="_blank">ver atual</a>{% else %} · <b>ainda sem contrato</b>{% endif %}<br><input type="file" name="contrato" accept="application/pdf"></label></p></div></div>
 <button>Salvar regras</button></form></div>{% endif %}
 <h2>Clínicas</h2>
 <p class="sub">{% if planilha %}Lidas da planilha Google a cada 10 minutos.{% else %}A planilha de clínicas ainda não foi configurada (config.json → clinicas.planilha_id). Por enquanto vale a lista abaixo.{% endif %}</p>
 <form method="post" action="{{b}}/clinicas/sincronizar"><button class="sec">Ler a planilha agora</button></form><p></p>
-<table><tr><th>Clínica</th><th>Cidade</th><th>Endereço</th><th>Dias</th><th>Janela</th><th>Origem</th></tr>
-{% for c in clinicas %}<tr><td>{{c.nome}}</td><td>{{c.cidade}}</td><td>{{c.endereco}}</td><td>{{c.dias}}</td><td>{{c.inicio}}–{{c.fim}}</td><td>{{c.origem}}</td></tr>{% endfor %}</table>
+<table><tr><th>Clínica</th><th>Cidade</th><th>Endereço</th><th>Horário (vai ao candidato)</th><th>Clientes</th><th>Interno (não vai ao candidato)</th></tr>
+{% for c in clinicas %}<tr><td>{{c.nome}}{% if c.agendamento %}<br><span class="tag al">exige agendamento</span>{% endif %}</td><td>{{c.cidade}}</td><td>{{c.endereco}}</td><td>{{c.horario_texto or (c.inicio ~ "–" ~ c.fim)}}<div class="sub">dias: {{c.dias}}</div></td><td>{{c.clientes}}</td><td class="sub" style="white-space:pre-wrap">{{c.obs_interna}}</td></tr>{% endfor %}</table>
 <details class="card"><summary>Cadastrar clínica à mão</summary><form class="linha" method="post" action="{{b}}/clinicas" style="margin-top:8px">
 <label>Nome<input name="nome" required></label><label>Cidade<input name="cidade"></label><label>Endereço<input name="endereco" required size="30"></label>
 <label>Dias<input name="dias" value="seg,ter,qua,qui,sex"></label><label>Início<input name="inicio" value="08:00" size="5"></label><label>Fim<input name="fim" value="11:30" size="5"></label>

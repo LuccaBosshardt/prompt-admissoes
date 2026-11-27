@@ -62,7 +62,10 @@ def receber(ev: dict, cfg=None, banco=None) -> str:
     if data.get("isGroup") or data.get("chatType") not in (None, "PERSONAL"):
         return "ignorado: não é conversa privada"
     key = data.get("key") or {}
-    jid = data.get("from") or key.get("remoteJid") or ""
+    if key.get("fromMe"):  # message.sent: `from` é o próprio chip; o contato está em receiver/remoteJid
+        jid = data.get("receiver") or key.get("remoteJid") or ""
+    else:
+        jid = data.get("from") or key.get("remoteJid") or ""
     if not jid.endswith("@s.whatsapp.net"):
         return "ignorado: não é contato"
     agora = regras.agora(cfg)
@@ -101,8 +104,9 @@ def _turno(pid: int) -> None:
         return
     try:
         fluxo.processar(BANCO, CFG, pid, regras.agora(CFG))
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 — erro técnico: a pessoa não pode ficar sem resposta
         BANCO.log(pid, "erro_turno", repr(e))
+        motor.humano(BANCO, pid, f"erro técnico no turno: {repr(e)[:120]}")
     finally:
         trava.release()
 
@@ -111,7 +115,7 @@ def vigia() -> None:
     ult_tick = ult_clin = 0.0
     while True:
         try:
-            CFG["chaves"] = config.carregar()["chaves"]  # chaves.json pode mudar sem reiniciar
+            config.chaves(CFG)  # chaves.json pode mudar sem reiniciar
             if time.time() - ult_tick >= CFG["cobranca"]["checagem_s"]:
                 ult_tick = time.time()
                 motor.tick(BANCO, CFG, regras.agora(CFG))
