@@ -9,5 +9,5 @@
 {% else %}<button class="ok" name="decisao" value="aprovar">Aprovar</button><input name="motivo" placeholder="motivo da recusa (vai para a pessoa)" size="34"><button class="no" name="decisao" value="recusar">Recusar</button>{% endif %}
 </form></div>{% else %}<div class="card sub">Nada esperando aprovação.</div>{% endfor %}
 <h2>Últimas decisões</h2><table><tr><th>Quando</th><th>Pessoa</th><th>O quê</th><th>Decisão</th></tr>
-{% for a in feitas %}<tr><td class="sub">{{a.decidido_em|dt}}</td><td>{{a.nome}}</td><td>{{TIPOS_ACAO.get(a.tipo,a.tipo)}}: {{a.resumo}}</td><td><span class="tag {% if a.status=='aprovada' %}ok{% else %}er{% endif %}">{{a.status}}</span> {{a.motivo or ""}}</td></tr>{% endfor %}</table>
+{% for a in feitas %}<tr><td class="sub">{{a.decidido_em|dt}}</td><td>{{a.nome}}</td><td>{{TIPOS_ACAO.get(a.tipo,a.tipo)}}: {{a.resumo}}</td><td><span class="tag {% if a.status=='aprovada' %}ok{% elif a.status=='recusada' %}er{% endif %}">{{"substituída por outra proposta" if a.status=='substituida' else a.status}}</span> {{a.motivo or ""}}</td></tr>{% endfor %}</table>
 {% endblock %}

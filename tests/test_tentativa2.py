@@ -188,3 +188,13 @@ def test_tentativa3_aprovar_guia_pela_ficha_avanca(b, cfg, aerovip):
     r = c.post(f"/p/{painel.SEGREDO}/pessoas/{p['id']}/acao", data={"op": "item_ok", "item_id": it["id"]},
                files={"arquivo": ("guia.jpg", b"x", "image/jpeg")}, follow_redirects=False)
     assert r.status_code == 303 and painel.BANCO.pessoa(p["id"])["etapa"] == "contrato"
+
+
+def test_tentativa3_documento_atrasado_aprova_em_qualquer_etapa(b, cfg, aerovip):
+    p = nova(b, cfg, aerovip)
+    b.atualizar(p["id"], etapa="guia")
+    it = next(i for i in b.itens(p["id"]) if i["item"] == "RG ou CNH")
+    b.exec("UPDATE itens SET status='recebido' WHERE id=?", it["id"])
+    aid = motor.criar_acao(b, p["id"], "documento", {"item_id": it["id"]}, "2ª foto do RG", em(QUI))
+    assert motor.aprovar(b, cfg, aid, em(QUI)) == "ok" and b.item(it["id"])["status"] == "aprovado"
+    assert b.pessoa(p["id"])["etapa"] == "guia"

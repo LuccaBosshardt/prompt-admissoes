@@ -44,7 +44,12 @@ curl -s -X POST http://127.0.0.1:4135/api/webhooks/prompt -H "x-api-key: $KEY" -
   -d "{\"name\":\"ponte prompt-admissoes\",\"url\":\"http://127.0.0.1:4134/webhook\",\"secret\":\"$SEG\",\"events\":[\"message.received\",\"message.sent\"]}"
 ```
 T4. Conferir: `curl -s 127.0.0.1:4134/healthz`; mensagem do Lucca aparece na ficha; resposta na Caixa de saída (seco).
-T5. Ligar o envio: em chaves.json, `"envio_ligado": true`. Desligar = voltar para false (vale em 2 s).
+T5. Ligar o envio. ANTES, zere o relógio das cobranças de quem foi cadastrado em modo seco (senão todos recebem a cobrança 1 no mesmo minuto):
+```
+sqlite3 /srv/prompt-admissoes-dados/admissoes.db "UPDATE pessoas SET pedido_em=datetime('now','localtime'), ultima_cobranca=NULL, cobrancas=0 WHERE status='ativo'"
+```
+   Depois, em chaves.json, `"envio_ligado": true`. Desligar = voltar para false (vale na hora, painel e ponte).
+   (`cobranca_em_seco` existe só para os testes; não use em produção.)
 
 ## Planilhas e arquivos que faltam (do Fabio Mansur)
 - Lista de clínicas: crie/compartilhe a planilha com colunas `nome | cidade | endereco | dias (seg,ter,...) | inicio | fim | orientacoes | clientes`

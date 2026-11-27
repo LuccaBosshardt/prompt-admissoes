@@ -226,7 +226,7 @@ def aprovar(b: Banco, cfg: dict, aid: int, agora: datetime, modo: str | None = N
         return "ação já decidida"
     p = b.pessoa(a["pessoa_id"])
     pl, pid = a["payload"], p["id"]
-    etapa_certa = {"documento": "documentos", "exame": "exame", "guia": "guia", "enviar_contrato": "contrato",
+    etapa_certa = {"exame": "exame", "guia": "guia", "enviar_contrato": "contrato",
                    "contrato": "contrato", "inicio": "inicio"}.get(a["tipo"])
     if etapa_certa and p["etapa"] != etapa_certa:
         _fechar_acao(b, aid, "substituida", agora, f"a pessoa já está na etapa {NOME_ETAPA.get(p['etapa'], p['etapa'])}")
@@ -318,6 +318,8 @@ def recusar(b: Banco, cfg: dict, aid: int, motivo: str, agora: datetime) -> str:
     _fechar_acao(b, aid, "recusada", agora, motivo)
     if a["tipo"] in ("documento", "guia", "contrato"):
         it = b.item(pl["item_id"])
+        if not it:
+            return "ok"  # item apagado (ex.: filho a menos): nada a pedir
         b.exec("UPDATE itens SET status='recusado', obs=CASE WHEN grupo='info' THEN obs ELSE ? END WHERE id=?",
                motivo, it["id"])
         b.atualizar(p["id"], aguardando="pessoa")
