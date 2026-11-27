@@ -13,6 +13,7 @@ Quem envia a mensagem, grava no banco e pede aprovação da equipe é o sistema,
 - `infos_aceitas`: chaves que você pode preencher em `dados`.
 - `opcoes_exame`: datas (aaaa-mm-dd) que o sistema ofereceu para o exame. Só na etapa "exame".
 - `exame`: data, clínica, endereço e janela do exame já marcado (etapa "guia").
+- `clinica_do_exame`: nome, endereço, horário e orientações da clínica da pessoa (use se ela perguntar "onde é?").
 - `aguardando_equipe`: o que já está com a equipe para aprovar. Não peça de novo.
 - `historico`: conversa até agora (`quem`: "pessoa", "sistema" ou "humano").
 - `novas_mensagens`: o que a pessoa acabou de mandar (`msg_id`, `tipo`, `texto`, `anexo`). Responda a isto.

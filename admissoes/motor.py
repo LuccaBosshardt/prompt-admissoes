@@ -9,7 +9,7 @@ import json
 import re
 from datetime import date, datetime, timedelta
 
-from . import regras, whatsapp
+from . import config, regras, whatsapp
 from .banco import Banco
 
 ETAPAS = ["documentos", "exame", "guia", "contrato", "inicio", "concluida"]
@@ -207,6 +207,9 @@ def criar_acao(b: Banco, pid, tipo: str, payload: dict, resumo: str, agora: date
               pid, tipo, json.dumps(payload, ensure_ascii=False, sort_keys=True))
     if ja:
         return ja["id"]
+    if tipo in ("exame", "inicio", "enviar_contrato"):
+        b.exec("UPDATE acoes SET status='substituida', decidido_em=? WHERE pessoa_id=? AND tipo=? AND status='pendente'",
+               agora.isoformat(), pid, tipo)
     aid = b.exec("INSERT INTO acoes (pessoa_id, tipo, payload, resumo, criado_em) VALUES (?,?,?,?,?)",
                  pid, tipo, json.dumps(payload, ensure_ascii=False, sort_keys=True), resumo, agora.isoformat())
     b.log(pid, "acao_criada", f"{tipo} {payload}")
@@ -223,6 +226,11 @@ def aprovar(b: Banco, cfg: dict, aid: int, agora: datetime, modo: str | None = N
         return "ação já decidida"
     p = b.pessoa(a["pessoa_id"])
     pl, pid = a["payload"], p["id"]
+    etapa_certa = {"documento": "documentos", "exame": "exame", "guia": "guia", "enviar_contrato": "contrato",
+                   "contrato": "contrato", "inicio": "inicio"}.get(a["tipo"])
+    if etapa_certa and p["etapa"] != etapa_certa:
+        _fechar_acao(b, aid, "substituida", agora, f"a pessoa já está na etapa {NOME_ETAPA.get(p['etapa'], p['etapa'])}")
+        return f"esta ação é de outra etapa (a pessoa está em {NOME_ETAPA.get(p['etapa'], p['etapa'])}); fechei sem mandar nada"
     if a["tipo"] == "documento":
         b.exec("UPDATE itens SET status='aprovado', atualizado_em=? WHERE id=?", agora.isoformat(), pl["item_id"])
         _fechar_acao(b, aid, "aprovada", agora)
@@ -370,7 +378,7 @@ def aplicar_resultado(b: Banco, cfg: dict, pid, res: dict, agora: datetime, nova
                 continue
             valor = str(n)
             cl = b.cliente(p["cliente_id"])
-            for x in b.todos("SELECT id, item FROM itens WHERE pessoa_id=? AND grupo='filho_doc' AND status='pendente'", pid):
+            for x in b.todos("SELECT id, item FROM itens WHERE pessoa_id=? AND grupo='filho_doc' AND status!='aprovado'", pid):
                 m_ = re.match(r"Filho (\d+) –", x["item"])
                 if m_ and int(m_.group(1)) > n:
                     b.exec("DELETE FROM itens WHERE id=?", x["id"])
@@ -489,7 +497,7 @@ def estoque(b: Banco, cidade: str = "", funcao: str = "", completo: bool = False
             continue
         if funcao and funcao.lower() not in (p["funcao"] or "").lower():
             continue
-        its = [i for i in b.itens(p["id"]) if i["grupo"] in ("doc", "filho_doc")]
+        its = [i for i in b.itens(p["id"]) if i["grupo"] in ("doc", "filho_doc") and not opcional(i)]
         p["docs_ok"] = bool(its) and all(i["status"] == "aprovado" for i in its)
         if completo and not p["docs_ok"]:
             continue
@@ -567,8 +575,11 @@ def tick(b: Banco, cfg: dict, agora: datetime) -> list[str]:
                        "Se não conseguiu ir, me avisa que a gente remarca.", agora)
                 feito.append(f"pos_exame {pid}")
             continue  # antes do pós-exame não há cobrança
-        if p["aguardando"] != "pessoa" or not cfg["chaves"].get("cobranca_ligada", True):
+        ch = config.chaves(cfg)
+        if p["aguardando"] != "pessoa" or not ch.get("cobranca_ligada", True):
             continue
+        if not ch.get("envio_ligado") and not ch.get("cobranca_em_seco"):
+            continue  # modo seco: a pessoa nunca recebeu nada; cobrança não conta
         base = max(x for x in (_ts(p["pedido_em"]), _ts(p["ultima_msg_pessoa"]), _ts(p["ultima_cobranca"]),
                                _ts(p["criado_em"])) if x)
         if agora < base + h:

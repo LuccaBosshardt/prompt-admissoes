@@ -23,8 +23,8 @@ def em(txt: str) -> datetime:
 @pytest.fixture
 def cfg(tmp_path):
     os.environ["ADMISSOES_DADOS"] = str(tmp_path)
+    (tmp_path / "chaves.json").write_text('{"envio_ligado": false, "cobranca_em_seco": true}')
     c = config.carregar()
-    c["chaves"]["envio_ligado"] = False
     return c
 
 

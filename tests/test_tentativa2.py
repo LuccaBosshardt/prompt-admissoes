@@ -157,3 +157,34 @@ def test_erro_no_turno_vai_para_humano(b, cfg, aerovip, monkeypatch):
     monkeypatch.setattr(ponte.fluxo, "processar", lambda *a: (_ for _ in ()).throw(RuntimeError("quebrou")))
     ponte._turno(p["id"])
     assert b.pessoa(p["id"])["status"] == "humano"
+
+
+def test_tentativa3_cobranca_nao_conta_em_modo_seco(b, cfg, aerovip):
+    (Path(cfg["dados_dir"]) / "chaves.json").write_text(json.dumps({"envio_ligado": False}))
+    p = nova(b, cfg, aerovip, agora="2026-11-23T10:00:00")
+    assert motor.tick(b, cfg, em("2026-11-25T10:00:00")) == [] and b.pessoa(p["id"])["cobrancas"] == 0
+
+
+def test_tentativa3_proposta_nova_substitui_e_acao_de_outra_etapa_nao_aprova(b, cfg, aerovip):
+    p = nova(b, cfg, aerovip)
+    b.atualizar(p["id"], etapa="exame")
+    a1 = motor.criar_acao(b, p["id"], "exame", {"data": "2026-11-27"}, "1", em(QUI))
+    a2 = motor.criar_acao(b, p["id"], "exame", {"data": "2026-11-30"}, "2", em(QUI))
+    assert b.acao(a1)["status"] == "substituida"
+    assert motor.aprovar(b, cfg, a2, em(QUI)) == "ok" and b.pessoa(p["id"])["etapa"] == "guia"
+    velha = b.exec("INSERT INTO acoes (pessoa_id, tipo, payload, status) VALUES (?, 'inicio', '{\"data\": \"2026-12-07\"}', 'pendente')", p["id"])
+    assert "outra etapa" in motor.aprovar(b, cfg, velha, em(QUI)) and b.pessoa(p["id"])["status"] == "ativo"
+
+
+def test_tentativa3_aprovar_guia_pela_ficha_avanca(b, cfg, aerovip):
+    from fastapi.testclient import TestClient
+    from admissoes import painel
+    cid = painel.BANCO.um("SELECT id FROM clientes WHERE nome='Aerovip'")["id"]
+    p = motor.cadastrar(painel.BANCO, painel.CFG, "Guia Teste", "11977770000", cid, em(QUI))
+    painel.BANCO.atualizar(p["id"], etapa="guia", exame_data="2026-11-27")
+    painel.BANCO.exec("INSERT INTO itens (pessoa_id, item, grupo) VALUES (?,?,?)", p["id"], motor.ITEM_GUIA, "exame")
+    it = painel.BANCO.um("SELECT id FROM itens WHERE pessoa_id=? AND item=?", p["id"], motor.ITEM_GUIA)
+    c = TestClient(painel.app)
+    r = c.post(f"/p/{painel.SEGREDO}/pessoas/{p['id']}/acao", data={"op": "item_ok", "item_id": it["id"]},
+               files={"arquivo": ("guia.jpg", b"x", "image/jpeg")}, follow_redirects=False)
+    assert r.status_code == 303 and painel.BANCO.pessoa(p["id"])["etapa"] == "contrato"

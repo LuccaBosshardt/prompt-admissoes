@@ -177,6 +177,15 @@ async def ficha_acao(seg: str, pid: int, op: str = Form(...), vaga_id: str = For
         it = BANCO.item(int(item_id))
         if not it or it["pessoa_id"] != pid:
             raise HTTPException(404)
+        if it["grupo"] in ("exame", "contrato"):  # guia / contrato: avança a etapa pelo motor
+            if caminho:
+                motor.receber_arquivo(BANCO, it, caminho, None, agora)
+            elif not it["arquivo"]:
+                return _ir(seg, f"/pessoas/{pid}", "Suba o arquivo da guia ou do contrato para aprovar.")
+            tipo = "guia" if it["grupo"] == "exame" else "contrato"
+            aid = motor.criar_acao(BANCO, pid, tipo, {"item_id": it["id"]}, f"{it['item']} (aprovado na ficha)", agora)
+            r = motor.aprovar(BANCO, CFG, aid, agora)
+            return _ir(seg, f"/pessoas/{pid}", "Aprovado e etapa avançada." if r == "ok" else r)
         BANCO.exec("UPDATE itens SET status='aprovado', arquivo=COALESCE(?, arquivo), atualizado_em=? WHERE id=?",
                    caminho, agora.isoformat(), it["id"])
         BANCO.exec("UPDATE acoes SET status='aprovada', motivo='aprovado na ficha', decidido_em=? WHERE pessoa_id=? "

@@ -32,12 +32,11 @@ def carregar() -> dict:
 def chaves(cfg: dict) -> dict:
     """Relê dados_dir/chaves.json (liga/desliga vale na hora, no painel e na ponte)."""
     out = dict(CHAVES_PADRAO)
-    out.update(cfg.get("chaves") or {})
     cp = Path(cfg["dados_dir"]) / "chaves.json"
     try:
-        out.update(json.loads(cp.read_text(encoding="utf-8")))
+        out.update(json.loads(cp.read_text(encoding="utf-8")))  # o arquivo é a fonte da verdade
     except (OSError, ValueError):
-        pass
+        out.update(cfg.get("chaves") or {})  # arquivo ilegível: fica o último valor lido
     cfg["chaves"] = out
     return out
 

@@ -28,6 +28,8 @@ def evento(b: Banco, cfg: dict, p: dict, novas: list[dict], agora: datetime) -> 
                   for i in itens],
         "infos_aceitas": [i["chave"] for i in (cl or {}).get("infos", [])],
         "opcoes_exame": p["marcas"].get("opcoes_exame", []) if p["etapa"] == "exame" else [],
+        "clinica_do_exame": {"nome": clin["nome"], "endereco": clin["endereco"], "horario": motor.janela(clin),
+                             "orientacoes": clin["orientacoes"]} if clin else None,
         "exame": {"data": p["exame_data"], "clinica": clin["nome"] if clin else None,
                   "endereco": clin["endereco"] if clin else None,
                   "janela": motor.janela(clin) if clin else None,
