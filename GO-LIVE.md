@@ -28,7 +28,7 @@ Chaves (`/srv/prompt-admissoes-dados/chaves.json`, a ponte relê a cada 2 s):
 5. Diga "pode ligar o envio". Só então o robô manda mensagens de verdade (T5).
 
 ## Passos técnicos (Claude roda, com o ok do Lucca)
-T0. AGORA PELO PAINEL: aba "Agente e WhatsApp" → "Conectar WhatsApp (gerar QR)" faz T2 e T3 sozinho e mostra o QR; "Ligar envio" faz T5 (zera as cobranças).
+T0. AGORA PELO PAINEL: aba "Agente e WhatsApp" → "Conectar WhatsApp (gerar QR)" cria e inicia a sessão, desliga o bot embutido (conferido), liga o webhook e mostra o QR; "Ligar envio" faz T5 (zera as cobranças).
 T1. API key: JÁ GERADA em 27/11 (CREDENCIAIS.txt, `API_KEY=`). Depois de criar a sessão (T2), no painel do WA-AKG
     por túnel (`ssh -L 4135:127.0.0.1:4135 root@187.77.240.228` → http://127.0.0.1:4135, login em CREDENCIAIS.txt):
     Bot Settings da sessão `prompt`: "Always Online" e "Auto Read" DESLIGADOS.

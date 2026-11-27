@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import time
 import shutil
 import uuid
 from datetime import date
@@ -35,6 +36,12 @@ app = FastAPI(title="Prompt Admissões", docs_url=None, redoc_url=None, openapi_
 
 @app.middleware("http")
 async def _cabecalhos(request: Request, call_next):
+    if request.method == "POST":
+        from urllib.parse import urlparse
+        origem = request.headers.get("origin") or request.headers.get("referer") or ""
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+        if origem and urlparse(origem).netloc != host:
+            return PlainTextResponse("origem recusada", 403)
     r = await call_next(request)
     r.headers["X-Robots-Tag"] = "noindex, nofollow"
     r.headers["Referrer-Policy"] = "no-referrer"
@@ -454,7 +461,13 @@ def agente_chaves(seg: str, envio: str = Form(""), cobranca: str = Form("")):
     if cobranca in ("1", "0"):
         ch["cobranca_ligada"] = cobranca == "1"
         msg = "Cobranças automáticas " + ("ligadas." if ch["cobranca_ligada"] else "desligadas.")
-    config.salvar_json(CFG, "chaves.json", {k: v for k, v in ch.items() if k in ("envio_ligado", "cobranca_ligada")})
+    atual = {}
+    try:
+        atual = json.loads((Path(CFG["dados_dir"]) / "chaves.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    atual.update({k: ch[k] for k in ("envio_ligado", "cobranca_ligada")})
+    config.salvar_json(CFG, "chaves.json", atual)
     BANCO.log(None, "chaves", json.dumps(config.chaves(CFG)))
     return _ir(seg, "/agente", msg)
 
@@ -465,15 +478,27 @@ def agente_ajustes(seg: str, assinatura: str = Form(""), instrucoes_extra: str =
     assinatura = " ".join(assinatura.split())[:80]
     if not assinatura:
         return _ir(seg, "/agente", "A assinatura não pode ficar vazia.")
-    config.salvar_json(CFG, "ajustes.json", {"assinatura": assinatura, "instrucoes_extra": instrucoes_extra.strip()[:3000]})
+    extra = instrucoes_extra.replace("<<<EVENTO", "").replace("EVENTO>>>", "").strip()[:1500]
+    config.salvar_json(CFG, "ajustes.json", {"assinatura": assinatura, "instrucoes_extra": extra})
+    BANCO.log(None, "ajustes_agente", f"assinatura={assinatura}; orientacoes={extra[:300]}")
     return _ir(seg, "/agente", "Ajustes do agente salvos. Valem na próxima mensagem.")
+
+
+_ULTIMO_TESTE = 0.0
 
 
 @app.post("/p/{seg}/agente/testar", response_class=HTMLResponse)
 def agente_testar(req: Request, seg: str, texto: str = Form(...), etapa: str = Form("documentos")):
     """Conversa de teste com o Hermes real: candidato fictício, nada é gravado nem enviado."""
     _ok(seg)
-    cl = BANCO.cliente(BANCO.um("SELECT id FROM clientes ORDER BY id LIMIT 1")["id"])
+    global _ULTIMO_TESTE
+    if time.time() - _ULTIMO_TESTE < 10:
+        return _ir(seg, "/agente", "Espere 10 segundos entre um teste e outro.")
+    _ULTIMO_TESTE = time.time()
+    primeiro = BANCO.um("SELECT id FROM clientes ORDER BY id LIMIT 1")
+    if not primeiro:
+        return _ir(seg, "/agente", "Cadastre um cliente antes de testar.")
+    cl = BANCO.cliente(primeiro["id"])
     agora = _agora()
     etapa = etapa if etapa in motor.ETAPAS else "documentos"
     ev = {"agora": f"{regras.DIAS[agora.weekday()]}, {agora:%d/%m/%Y %H:%M}", "pessoa": {"nome": "Candidato Teste", "funcao": "Auxiliar", "cidade": ""},

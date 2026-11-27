@@ -20,7 +20,14 @@ class FakeWA:
         if caminho == "/api/sessions" and metodo == "POST":
             self.sessao = True
             return 200, {"status": True}
+        if caminho.endswith("/bot-config") and metodo == "POST":
+            self.bot = corpo
+            return 200, {}
         if caminho.endswith("/bot-config"):
+            return 200, {"data": {"enabled": (getattr(self, "bot", {}) or {}).get("enabled", True), "autoRead": False, "alwaysOnline": False}}
+        if caminho.endswith("/start"):
+            self.iniciada = True
+            self.status = "SCAN_QR"
             return 200, {}
         if caminho == "/api/webhooks/prompt" and metodo == "GET":
             return 200, {"data": self.webhooks}
@@ -46,6 +53,7 @@ def wa(monkeypatch):
 def test_conectar_cria_sessao_desliga_bot_e_liga_webhook_uma_vez(cfg, wa):
     feito = gateway.conectar(cfg)
     assert "sessão criada" in feito and "webhook ligado à ponte" in feito
+    assert "bot embutido desligado (conferido)" in feito and "sessão iniciada" in feito and wa.iniciada
     bot = next(c for c in wa.chamadas if c[1].endswith("/bot-config"))[2]
     assert bot["enabled"] is False and bot["autoRead"] is False and bot["alwaysOnline"] is False
     wh = wa.webhooks[0]
@@ -111,8 +119,33 @@ def test_ajustes_do_agente_valem_no_texto_e_no_prompt(wa):
 
 def test_testar_agente_nao_grava_nem_envia(wa, monkeypatch):
     c, base = _c()
+    monkeypatch.setattr(painel, "_ULTIMO_TESTE", 0.0)
     monkeypatch.setattr(agente, "responder", lambda ev, cfg: {"mensagens": ["Quem fala de salário é a equipe."], "precisa_humano": True})
     antes = (painel.BANCO.um("SELECT COUNT(*) n FROM saida")["n"], painel.BANCO.um("SELECT COUNT(*) n FROM pessoas")["n"])
     r = c.post(base + "/agente/testar", data={"texto": "quanto vou ganhar?", "etapa": "documentos"})
     assert r.status_code == 200 and "Quem fala de salário é a equipe." in r.text
     assert (painel.BANCO.um("SELECT COUNT(*) n FROM saida")["n"], painel.BANCO.um("SELECT COUNT(*) n FROM pessoas")["n"]) == antes
+
+
+def test_bot_que_nao_desliga_vira_aviso(cfg, monkeypatch):
+    f = FakeWA()
+    def fake(cfg_, metodo, caminho, corpo=None, timeout=15):
+        if caminho.endswith("/bot-config") and metodo == "GET":
+            return 200, {"data": {"enabled": True}}
+        return f(cfg_, metodo, caminho, corpo, timeout)
+    monkeypatch.setattr(gateway, "_api", fake)
+    assert any("NÃO desligou" in x for x in gateway.conectar(cfg))
+
+
+def test_post_de_outra_origem_e_recusado(wa):
+    c, base = _c()
+    r = c.post(base + "/agente/chaves", data={"envio": "0"}, headers={"origin": "https://malicioso.exemplo"})
+    assert r.status_code == 403
+
+
+def test_botao_nao_apaga_outras_chaves(wa):
+    c, base = _c()
+    config.salvar_json(painel.CFG, "chaves.json", {"envio_ligado": False, "cobranca_ligada": True, "cobranca_em_seco": True})
+    c.post(base + "/agente/chaves", data={"cobranca": "0"})
+    d = json.loads((Path(painel.CFG["dados_dir"]) / "chaves.json").read_text())
+    assert d["cobranca_em_seco"] is True and d["cobranca_ligada"] is False

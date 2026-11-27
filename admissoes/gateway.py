@@ -75,22 +75,33 @@ def estado(cfg: dict) -> dict:
 def conectar(cfg: dict) -> list[str]:
     """Cria a sessão (se falta), desliga o bot embutido e liga o webhook para a ponte. Idempotente."""
     sid, feito = cfg["whatsapp"]["sessao"], []
-    cod, _ = _api(cfg, "GET", f"/api/sessions/{sid}")
+    cod, d = _api(cfg, "GET", f"/api/sessions/{sid}")
     if cod == 404:
         cod, d = _api(cfg, "POST", "/api/sessions", {"name": "Prompt Admissões", "sessionId": sid}, timeout=30)
         if cod >= 300:
             raise GatewayErro(f"não criou a sessão: {d.get('message') or cod}")
         feito.append("sessão criada")
+        status = "STOPPED"  # o WA-AKG cria a sessão parada
+    else:
+        status = str((d.get("data") or {}).get("status") or "")
     # bot embutido do WA-AKG (comandos #ping, figurinha, auto-resposta) DESLIGADO; sem leitura automática e sem "online"
-    cod, _ = _api(cfg, "POST", f"/api/sessions/{sid}/bot-config",
-                  {"enabled": False, "autoRead": False, "alwaysOnline": False, "autoReplyMode": "ALL"})
-    feito.append("bot embutido desligado" if cod < 300 else f"bot-config respondeu {cod}")
+    _api(cfg, "POST", f"/api/sessions/{sid}/bot-config",
+         {"enabled": False, "autoRead": False, "alwaysOnline": False, "autoReplyMode": "ALL"})
+    cod, bc = _api(cfg, "GET", f"/api/sessions/{sid}/bot-config")  # confere de verdade
+    bcd = bc.get("data") or bc
+    if cod < 300 and bcd.get("enabled") is False and not bcd.get("autoRead") and not bcd.get("alwaysOnline"):
+        feito.append("bot embutido desligado (conferido)")
+    else:
+        feito.append("ATENÇÃO: o bot embutido do WA-AKG NÃO desligou; avise o suporte")
     if not estado(cfg)["webhook"]:
         url = f"http://{cfg['ponte']['host']}:{cfg['ponte']['porta']}/webhook"
         cod, d = _api(cfg, "POST", f"/api/webhooks/{sid}", {"name": "ponte prompt-admissoes", "url": url,
                                                             "secret": segredo_webhook(cfg),
                                                             "events": ["message.received", "message.sent"]})
         feito.append("webhook ligado à ponte" if cod < 300 else f"webhook respondeu {cod}: {d.get('message', '')}")
+    if status not in ("CONNECTED", "SCAN_QR"):  # sessão parada: liga o socket para o QR aparecer (nunca logout)
+        cod, d = _api(cfg, "POST", f"/api/sessions/{sid}/start", {}, timeout=30)
+        feito.append("sessão iniciada" if cod < 300 else f"start respondeu {cod}: {d.get('message', '')}")
     return feito
 
 

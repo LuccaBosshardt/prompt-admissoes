@@ -16,6 +16,7 @@
 {% endif %}
 </div>
 <div class="card"><h2 style="margin-top:0">2. Envio de mensagens</h2>
+{% if chaves.envio_ligado and est.status != 'CONNECTED' %}<div class="aviso">O envio está LIGADO, mas o WhatsApp não está conectado ({{sit[0]}}). As mensagens vão falhar e ir para "Precisa de humano". Reconecte no bloco 1 ou desligue o envio.</div>{% endif %}
 <p>Envio: {% if chaves.envio_ligado %}<span class="tag ok">LIGADO: o robô manda mensagens de verdade</span>{% else %}<span class="tag al">desligado (modo seco)</span>{% endif %}</p>
 <form method="post" action="{{b}}/agente/chaves" class="linha">
 {% if chaves.envio_ligado %}<button class="no" name="envio" value="0" onclick="return confirm('Desligar o envio? Nada mais sai no WhatsApp.')">Desligar envio</button>
@@ -48,7 +49,9 @@
 async function qr(){ try{ const r=await fetch("{{b}}/agente/qr.json"); const d=await r.json(); const box=document.getElementById('qrbox'); const sit=document.getElementById('sit');
   sit.textContent=d.rotulo||d.status;
   if(d.status==='CONNECTED'||d.conectado){ box.innerHTML='<b style="color:#1b7f4b">Conectado! Recarregando…</b>'; setTimeout(()=>location.reload(),1500); return; }
-  if(d.base64){ box.innerHTML='<img alt="QR do WhatsApp" style="width:260px;height:260px;border:1px solid #dfe4ee;border-radius:10px" src="'+d.base64+'"><div class="sub">O QR muda a cada ~20 s. Esta tela atualiza sozinha.</div>'; }
+  if(d.base64 && d.base64.startsWith('data:image/png;base64,')){ box.textContent=''; const im=document.createElement('img'); im.alt='QR do WhatsApp';
+    im.style.cssText='width:260px;height:260px;border:1px solid #dfe4ee;border-radius:10px'; im.src=d.base64; const t=document.createElement('div');
+    t.className='sub'; t.textContent='O QR muda a cada ~20 s. Esta tela atualiza sozinha.'; box.append(im,t); }
   else { box.textContent=d.erro||d.aguarde||'Aguardando o QR…'; }
  }catch(e){} setTimeout(qr,4000); }
 qr();
