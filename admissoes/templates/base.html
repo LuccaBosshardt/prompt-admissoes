@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Prompt Admissões</title>
+<style>
+:root{--azul:#1f4e9c;--azul2:#e8eef9;--txt:#1d2433;--sub:#5b6476;--borda:#dfe4ee;--ok:#1b7f4b;--okf:#e6f5ec;--al:#b4540a;--alf:#fdf1e4;--er:#b42318;--erf:#fdecea}
+*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--txt);background:#f6f8fc}
+header{background:#fff;border-bottom:1px solid var(--borda);position:sticky;top:0;z-index:5}
+.top{max-width:1200px;margin:auto;display:flex;align-items:center;gap:18px;padding:10px 16px;flex-wrap:wrap}
+.marca{font-weight:700;color:var(--azul);font-size:17px;text-decoration:none}
+nav a{color:var(--sub);text-decoration:none;padding:6px 10px;border-radius:8px;font-weight:500}
+nav a:hover{background:var(--azul2);color:var(--azul)}
+.badge{display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--er);color:#fff;font-size:12px;text-align:center;margin-left:3px}
+main{max-width:1200px;margin:auto;padding:18px 16px 60px}
+h1{font-size:22px;margin:4px 0 14px}h2{font-size:17px;margin:22px 0 10px}
+.card{background:#fff;border:1px solid var(--borda);border-radius:12px;padding:16px;margin-bottom:14px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.kpi{font-size:28px;font-weight:700;color:var(--azul)}.kpi small{display:block;font-size:13px;color:var(--sub);font-weight:500}
+table{width:100%;border-collapse:collapse;background:#fff}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--borda);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);background:#fafbfe}
+a{color:var(--azul)}input,select,textarea{font:inherit;padding:7px 9px;border:1px solid var(--borda);border-radius:8px;background:#fff;max-width:100%}
+textarea{width:100%;min-height:120px}button,.btn{font:inherit;font-weight:600;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;background:var(--azul);color:#fff;text-decoration:none;display:inline-block}
+button.sec{background:var(--azul2);color:var(--azul)}button.ok{background:var(--ok)}button.no{background:var(--er)}
+form.linha{display:flex;gap:8px;flex-wrap:wrap;align-items:end}form.linha label{display:flex;flex-direction:column;font-size:12px;color:var(--sub);gap:3px}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600;background:var(--azul2);color:var(--azul)}
+.tag.ok,.st-aprovado{background:var(--okf);color:var(--ok)}.tag.al,.st-recebido{background:var(--alf);color:var(--al)}.tag.er,.st-recusado{background:var(--erf);color:var(--er)}.st-pendente{background:#eef0f4;color:var(--sub)}
+.aviso{padding:10px 14px;border-radius:10px;background:var(--alf);color:var(--al);margin-bottom:14px;font-weight:500}
+.flash{padding:10px 14px;border-radius:10px;background:var(--okf);color:var(--ok);margin-bottom:14px;font-weight:500}
+.chat{max-height:520px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.m{max-width:80%;padding:7px 11px;border-radius:10px;white-space:pre-wrap;font-size:14px}
+.m.pessoa{background:#fff;border:1px solid var(--borda);align-self:flex-start}.m.sistema{background:#dcf3e3;align-self:flex-end}.m.humano{background:#e3ebfb;align-self:flex-end}
+.m small{display:block;color:var(--sub);font-size:11px;margin-top:2px}.sub{color:var(--sub);font-size:13px}
+.cols{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}@media(max-width:900px){.cols{grid-template-columns:1fr}}
+img.doc{max-width:240px;max-height:240px;border-radius:8px;border:1px solid var(--borda)}
+</style></head><body>
+<header><div class="top"><a class="marca" href="{{b}}/">Prompt Admissões</a>
+<nav><a href="{{b}}/pessoas">Pessoas</a><a href="{{b}}/aprovacoes">Aprovações{% if cont.aprov %}<span class="badge">{{cont.aprov}}</span>{% endif %}</a>
+<a href="{{b}}/humano">Precisa de humano{% if cont.humano %}<span class="badge">{{cont.humano}}</span>{% endif %}</a>
+<a href="{{b}}/vagas">Vagas</a><a href="{{b}}/estoque">Estoque</a><a href="{{b}}/clientes">Clientes</a><a href="{{b}}/saida">Caixa de saída</a></nav></div></header>
+<main>
+{% if not envio_ligado %}<div class="aviso">Modo seco: o WhatsApp ainda não está ligado. As mensagens ficam na <a href="{{b}}/saida">caixa de saída</a> e não saem.</div>{% endif %}
+{% if msg %}<div class="flash">{{msg}}</div>{% endif %}
+{% block corpo %}{% endblock %}
+</main></body></html>

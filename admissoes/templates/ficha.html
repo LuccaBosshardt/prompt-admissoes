@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block corpo %}
+<h1>{{p.nome}} <span class="tag">{{NOME_ETAPA.get(p.etapa,p.etapa)}}</span> <span class="tag {% if p.status=='humano' %}er{% elif p.status=='admitida' %}ok{% endif %}">{{p.status}}</span></h1>
+<p class="sub">{{p.telefone}} · {{cliente.nome if cliente else "sem cliente"}} · {{p.funcao or ""}} {{p.cidade or ""}} · vez de: <b>{{p.aguardando}}</b> · cobranças {{p.cobrancas}}/3{% if p.faltas %} · faltas no exame {{p.faltas}}{% endif %}
+{% if p.pausa_ate %} · robô pausado até {{p.pausa_ate|dt}}{% endif %}</p>
+{% if p.status=='humano' %}<div class="aviso">Precisa de humano: {{p.motivo_humano}}</div>{% endif %}
+<div class="cols"><div>
+<div class="card"><h2 style="margin-top:0">Checklist</h2>
+<table><tr><th>Item</th><th>Situação</th><th>Valor / arquivo</th><th></th></tr>
+{% for i in itens %}<tr><td>{{i.obs if i.grupo=='info' and i.obs else i.item}}</td><td><span class="tag st-{{i.status}}">{{i.status}}</span>{% if i.status=='recusado' and i.grupo!='info' %}<div class="sub">{{i.obs}}</div>{% endif %}</td>
+<td>{% if i.valor %}{{i.valor}}{% endif %}{% if i.arquivo %}<a href="{{b}}/arquivo/item/{{i.id}}" target="_blank">ver arquivo</a>{% endif %}</td>
+<td>{% if i.status!='aprovado' %}<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" enctype="multipart/form-data" class="linha"><input type="hidden" name="op" value="item_ok"><input type="hidden" name="item_id" value="{{i.id}}">{% if i.grupo!='info' %}<input type="file" name="arquivo" style="max-width:150px">{% endif %}<button class="sec" title="A equipe recebeu por fora e aprova">Aprovar</button></form>{% endif %}</td></tr>{% endfor %}
+</table>
+{% if p.exame_data %}<p><b>Exame:</b> {{p.exame_data|dia}} {% if clinica %}· {{clinica.nome}} · {{clinica.endereco}} · {{clinica.inicio}}–{{clinica.fim}}{% endif %}</p>{% endif %}
+{% if p.data_inicio %}<p><b>Início:</b> {{p.data_inicio|dia}}</p>{% endif %}
+{% if p.etapa=='contrato' and p.contrato_modo=='presencial' %}<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" enctype="multipart/form-data" class="linha"><input type="hidden" name="op" value="contrato_presencial"><label>Foto do contrato assinado<input type="file" name="arquivo"></label><button class="ok">Contrato assinado na unidade</button></form>{% endif %}
+</div>
+<div class="card"><h2 style="margin-top:0">Aprovações desta pessoa</h2>
+{% for a in acoes %}<div style="padding:6px 0;border-bottom:1px solid var(--borda)"><span class="tag {% if a.status=='aprovada' %}ok{% elif a.status=='recusada' %}er{% else %}al{% endif %}">{{a.status}}</span> {{TIPOS_ACAO.get(a.tipo,a.tipo)}}: {{a.resumo}} <span class="sub">{{a.criado_em|dt}}</span>
+{% if a.status=='pendente' %}<form method="post" action="{{b}}/aprovacoes/{{a.id}}" class="linha" style="margin-top:6px"><input type="hidden" name="volta" value="/pessoas/{{p.id}}">
+{% if a.tipo=='enviar_contrato' %}<button class="ok" name="modo" value="remoto" onclick="this.form.decisao.value='aprovar'">Enviar contrato (remoto)</button><button class="ok" name="modo" value="presencial" onclick="this.form.decisao.value='aprovar'">Assinatura presencial</button><input type="hidden" name="decisao" value="aprovar">
+{% else %}<button class="ok" name="decisao" value="aprovar">Aprovar</button><input name="motivo" placeholder="motivo da recusa"><button class="no" name="decisao" value="recusar">Recusar</button>{% endif %}</form>{% endif %}</div>
+{% else %}<p class="sub">Nenhuma ainda.</p>{% endfor %}</div>
+<div class="card"><h2 style="margin-top:0">Ações da equipe</h2>
+<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" class="linha"><input type="hidden" name="op" value="vaga"><label>Vaga<select name="vaga_id"><option value="">— sem vaga (estoque) —</option>{% for v in vagas %}<option value="{{v.id}}" {% if v.id==p.vaga_id %}selected{% endif %}>#{{v.id}} {{v.cliente}} · {{v.funcao}} · {{v.cidade}} ({{v.status}})</option>{% endfor %}</select></label><button class="sec">Ligar à vaga</button></form>
+<p></p>
+<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" class="linha"><input type="hidden" name="op" value="mensagem"><label style="flex:1">Mandar mensagem da equipe<input name="texto" style="width:100%"></label><button class="sec">Mandar</button></form>
+<p></p>
+<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" class="linha">
+{% if p.status=='humano' %}<button name="op" value="robo" class="ok">Devolver ao robô</button>{% elif p.status=='ativo' %}<input name="texto" placeholder="motivo"><button name="op" value="humano" class="sec">Assumir (tirar do robô)</button>{% endif %}
+{% if p.status!='desistiu' %}<button name="op" value="desistiu" class="no" onclick="return confirm('Marcar como desistiu?')">Desistiu</button>{% endif %}</form>
+</div></div>
+<div><div class="card"><h2 style="margin-top:0">Conversa</h2><div class="chat">
+{% for m in msgs %}<div class="m {{m.quem}}">{{m.texto or ""}}{% if m.arquivo %}<br>{% if m.tipo=='IMAGE' %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank"><img class="doc" src="{{b}}/arquivo/msg/{{m.id}}"></a>{% else %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank">📎 anexo</a>{% endif %}{% endif %}<small>{{m.quem}} · {{m.em|dt}}</small></div>{% else %}<p class="sub">Sem mensagens.</p>{% endfor %}
+</div></div>
+<div class="card"><h2 style="margin-top:0">Registro</h2>{% for l in log %}<div class="sub">{{l.em|dt}} · <b>{{l.tipo}}</b> {{l.detalhe[:160]}}</div>{% endfor %}</div></div></div>
+{% endblock %}

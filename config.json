@@ -1,0 +1,26 @@
+{
+  "_leia": "Config do Prompt Admissões. Segredos e chaves de liga/desliga ficam em dados_dir (fora do repo). Ver GO-LIVE.md.",
+  "dados_dir": "/srv/prompt-admissoes-dados",
+  "fuso": "America/Sao_Paulo",
+  "perfil_hermes": "promptadmissoes",
+  "hermes_timeout_s": 180,
+  "assinatura": "Departamento Pessoal – Prompt Serviços",
+  "janela_envio": {"dias": [0, 1, 2, 3, 4, 5], "inicio": "08:00", "fim": "21:00"},
+  "cobranca": {"intervalo_h": 24, "maximo": 3, "checagem_s": 60},
+  "exame": {"max_faltas": 3, "hora_pos_exame": "14:00", "hora_vespera": "09:00"},
+  "feriados": ["2026-12-25", "2027-01-01", "2027-02-08", "2027-02-09", "2027-03-26", "2027-04-21",
+               "2027-05-01", "2027-05-27", "2027-09-07", "2027-10-12", "2027-11-02", "2027-11-15",
+               "2027-11-20", "2027-12-25"],
+  "whatsapp": {
+    "base_url": "http://127.0.0.1:4135",
+    "sessao": "prompt",
+    "credenciais_arquivo": "/srv/wa-akg-prompt/CREDENCIAIS.txt",
+    "media_dir": "/srv/wa-akg-prompt/data/media",
+    "intervalo_entre_mensagens_s": 3,
+    "espera_juntar_mensagens_s": 8,
+    "pausa_humano_horas": 12
+  },
+  "painel": {"host": "127.0.0.1", "porta": 4133},
+  "ponte": {"host": "127.0.0.1", "porta": 4134},
+  "clinicas": {"planilha_id": "", "aba": "A1:H300", "intervalo_s": 600}
+}

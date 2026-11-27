@@ -1,0 +1,60 @@
+# Perfil Hermes `promptadmissoes` — atendimento de ADMISSÃO da Prompt Serviços (WhatsApp do candidato).
+# Fonte: /srv/prompt-admissoes/perfil/ → instalar_perfil.sh copia para /root/.hermes/profiles/promptadmissoes/.
+# Fluxo: WA-AKG `wa-akg-prompt` (:4135) → webhook → ponte (:4134) → `hermes --profile promptadmissoes -z <EVENTO>`
+#        → JSON → motor (código com travas) grava no banco e responde.
+
+# --- Modelo: SÓ a assinatura Codex (regra do Lucca 19/11/2026). Login: TARGETS do codex_auth_sync.py ---
+model:
+  default: gpt-6-astra
+  provider: openai-codex
+  base_url: https://chatgpt.com/backend-api/codex
+
+fallback_providers: []
+
+timezone: America/Sao_Paulo
+
+# Sem ferramentas: o candidato é público. Quem age é o motor.
+toolsets: []
+
+agent:
+  max_turns: 4
+  reasoning_effort: medium
+  environment_probe: false
+  disabled_toolsets:
+    - terminal
+    - file
+    - browser
+    - code_execution
+    - delegation
+    - cronjob
+    - web
+    - messaging
+    - memory
+    - session_search
+    - skills
+    - todo
+    - clarify
+    - tts
+    - image_gen
+    - video
+    - vision
+    - moa
+
+# Memória DESLIGADA: cada candidato é um caso; memória entre casos vazaria dado pessoal.
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+
+display:
+  streaming: false
+  show_reasoning: false
+  final_response_markdown: strip
+
+approvals:
+  mode: manual
+  cron_mode: deny
+
+security:
+  allow_private_urls: false
+  tirith_enabled: true
+# SEM gateway Telegram/WhatsApp neste perfil. Não configure `platforms` nem `whatsapp`.

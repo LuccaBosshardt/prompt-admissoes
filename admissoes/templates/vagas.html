@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block corpo %}
+<h1>Vagas</h1>
+<div class="card"><h2 style="margin-top:0">Nova vaga</h2><form class="linha" method="post" action="{{b}}/vagas">
+<label>Cliente<select name="cliente_id">{% for c in clientes %}<option value="{{c.id}}">{{c.nome}}</option>{% endfor %}</select></label>
+<label>Função<input name="funcao" required></label><label>Cidade<input name="cidade" size="12"></label>
+<label>Quantidade<input name="quantidade" type="number" min="1" value="1" style="width:80px"></label>
+<label>Data de início<input name="data_inicio" type="date"></label><label>Parceiro<input name="parceiro" size="14"></label>
+<label>Obs<input name="obs" size="18"></label><button>Criar vaga</button></form></div>
+<form class="linha" method="get"><label>Situação<select name="status" onchange="this.form.submit()">{% for s in ["aberta","fechada","cancelada",""] %}<option value="{{s}}" {% if status==s %}selected{% endif %}>{{s or "todas"}}</option>{% endfor %}</select></label></form><p></p>
+<table><tr><th>#</th><th>Cliente / função</th><th>Cidade</th><th>Posições</th><th>Início</th><th>Parceiro</th><th>Pessoas</th><th>Situação</th></tr>
+{% for v in lista %}<tr><td>{{v.id}}</td><td>{{v.cliente}}<div class="sub">{{v.funcao}}</div></td><td>{{v.cidade or ""}}</td><td><b>{{v.ocupadas}}</b>/{{v.quantidade}}</td><td>{{v.data_inicio|dia}}</td><td>{{v.parceiro or ""}}</td>
+<td>{% for p in v.pessoas %}<a href="{{b}}/pessoas/{{p.id}}">{{p.nome}}</a> <span class="sub">({{NOME_ETAPA.get(p.etapa,p.etapa)}})</span><br>{% endfor %}</td>
+<td><form method="post" action="{{b}}/vagas/{{v.id}}/status" class="linha"><select name="status" onchange="this.form.submit()">{% for s in ["aberta","fechada","cancelada"] %}<option {% if v.status==s %}selected{% endif %}>{{s}}</option>{% endfor %}</select></form></td></tr>
+{% else %}<tr><td colspan="8" class="sub">Nenhuma vaga.</td></tr>{% endfor %}</table>
+{% endblock %}

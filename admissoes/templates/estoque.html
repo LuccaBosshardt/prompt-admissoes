@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block corpo %}
+<h1>Estoque de pessoas</h1><p class="sub">Pessoas sem vaga ligada (fora as que desistiram). Ligue uma pessoa a uma vaga na ficha dela.</p>
+<form class="linha" method="get"><label>Cidade<input name="cidade" value="{{f.cidade}}"></label><label>Função<input name="funcao" value="{{f.funcao}}"></label>
+<label><span><input type="checkbox" name="completo" value="1" {% if f.completo %}checked{% endif %}> só documentação completa</span></label><button class="sec">Filtrar</button></form><p></p>
+<table><tr><th>Pessoa</th><th>Função</th><th>Cidade</th><th>Etapa</th><th>Documentos</th><th>Situação</th></tr>
+{% for p in lista %}<tr><td><a href="{{b}}/pessoas/{{p.id}}">{{p.nome}}</a><div class="sub">{{p.cliente or ""}}</div></td><td>{{p.funcao or ""}}</td><td>{{p.cidade or ""}}</td><td>{{NOME_ETAPA.get(p.etapa,p.etapa)}}</td>
+<td>{% if p.docs_ok %}<span class="tag ok">completos</span>{% else %}<span class="tag al">faltando</span>{% endif %}</td><td>{{p.status}}</td></tr>
+{% else %}<tr><td colspan="6" class="sub">Ninguém no estoque com esse filtro.</td></tr>{% endfor %}</table>
+{% endblock %}

@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block corpo %}
+<h1>Caixa de saída</h1><p class="sub">Tudo que o sistema mandou ou mandaria no WhatsApp. "seco" = não saiu (WhatsApp desligado).</p>
+<table><tr><th>Quando</th><th>Para</th><th>Mensagem</th><th>Situação</th></tr>
+{% for s in lista %}<tr><td class="sub">{{s.em|dt}}</td><td>{% if s.pessoa_id %}<a href="{{b}}/pessoas/{{s.pessoa_id}}">{{s.nome}}</a>{% endif %}</td><td style="white-space:pre-wrap">{{s.texto}}{% if s.arquivo %}<br>📎 {{s.arquivo.split('/')[-1]}}{% endif %}</td>
+<td>{% if s.enviado %}<span class="tag ok">enviado</span>{% elif s.erro %}<span class="tag er">erro</span><div class="sub">{{s.erro}}</div>{% else %}<span class="tag al">seco</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="sub">Vazia.</td></tr>{% endfor %}</table>
+{% endblock %}

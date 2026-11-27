@@ -1,0 +1,13 @@
+[Unit]
+Description=Prompt Admissões — painel da equipe (127.0.0.1:4133)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/prompt-admissoes
+ExecStart=/srv/prompt-admissoes/.venv/bin/python -m admissoes.painel
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

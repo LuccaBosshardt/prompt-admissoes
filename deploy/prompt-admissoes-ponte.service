@@ -1,0 +1,14 @@
+[Unit]
+Description=Prompt Admissões — ponte WA-AKG → Hermes promptadmissoes (127.0.0.1:4134)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/prompt-admissoes
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/root/.local/bin
+ExecStart=/srv/prompt-admissoes/.venv/bin/python -m admissoes.ponte
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

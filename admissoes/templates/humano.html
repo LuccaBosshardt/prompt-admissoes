@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block corpo %}
+<h1>Precisa de humano</h1><p class="sub">Casos que o robô parou: 3 cobranças sem resposta, pedido da pessoa, erro técnico ou número sem cadastro. Abra a ficha, resolva e clique em "Devolver ao robô".</p>
+<table><tr><th>Pessoa</th><th>Cliente</th><th>Etapa</th><th>Motivo</th><th>Desde</th></tr>
+{% for p in lista %}<tr><td><a href="{{b}}/pessoas/{{p.id}}">{{p.nome}}</a><div class="sub">{{p.telefone}}</div></td><td>{{p.cliente or "sem cadastro"}}</td><td>{{NOME_ETAPA.get(p.etapa,p.etapa)}}</td><td>{{p.motivo_humano}}</td><td class="sub">{{p.atualizado_em|dt}}</td></tr>
+{% else %}<tr><td colspan="5" class="sub">Nenhum caso.</td></tr>{% endfor %}</table>
+{% endblock %}

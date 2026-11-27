@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block corpo %}
+<h1>Visão geral</h1>
+<div class="grid">
+<a class="card" href="{{b}}/aprovacoes" style="text-decoration:none"><div class="kpi">{{cont.aprov}}<small>aprovações esperando</small></div></a>
+<a class="card" href="{{b}}/humano" style="text-decoration:none"><div class="kpi">{{cont.humano}}<small>precisam de humano</small></div></a>
+<a class="card" href="{{b}}/vagas" style="text-decoration:none"><div class="kpi">{{vagas}}<small>vagas abertas</small></div></a>
+<a class="card" href="{{b}}/estoque" style="text-decoration:none"><div class="kpi">{{estoque}}<small>pessoas no estoque</small></div></a>
+</div>
+<h2>Pessoas com o robô, por etapa</h2>
+<div class="grid">{% for e in ETAPAS %}<a class="card" href="{{b}}/pessoas?etapa={{e}}" style="text-decoration:none"><div class="kpi">{{por_etapa.get(e,0)}}<small>{{NOME_ETAPA[e]}}</small></div></a>{% endfor %}</div>
+<div class="card"><b>Como funciona:</b> o DP cadastra a pessoa aprovada em <a href="{{b}}/pessoas">Pessoas</a>. O robô manda os parabéns e a lista de documentos, cobra até 3 vezes por etapa e traz para <a href="{{b}}/aprovacoes">Aprovações</a> cada decisão (documento, data do exame, guia, contrato, data de início). Sem resposta após 3 cobranças, o caso vai para <a href="{{b}}/humano">Precisa de humano</a>.</div>
+{% endblock %}

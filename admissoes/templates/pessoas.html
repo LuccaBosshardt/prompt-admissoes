@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block corpo %}
+<h1>Pessoas</h1>
+<div class="card"><h2 style="margin-top:0">Cadastrar pessoa aprovada pelo RH</h2>
+<form class="linha" method="post" action="{{b}}/pessoas">
+<label>Nome completo<input name="nome" required size="28"></label>
+<label>WhatsApp (DDD + número)<input name="telefone" required placeholder="11 99999-9999" size="16"></label>
+<label>Cliente<select name="cliente_id" required>{% for c in clientes %}<option value="{{c.id}}">{{c.nome}}</option>{% endfor %}</select></label>
+<label>Vaga (opcional)<select name="vaga_id"><option value="">— sem vaga (vai para o estoque) —</option>{% for v in vagas %}<option value="{{v.id}}">#{{v.id}} {{v.cliente}} · {{v.funcao}} · {{v.cidade}}</option>{% endfor %}</select></label>
+<label>Função<input name="funcao" placeholder="Auxiliar de Lavanderia" size="20"></label>
+<label>Cidade<input name="cidade" size="12"></label>
+<button>Cadastrar e mandar mensagem</button></form></div>
+<form class="linha" method="get" style="margin-bottom:10px">
+<label>Busca<input name="q" value="{{f.q}}" placeholder="nome ou telefone"></label>
+<label>Etapa<select name="etapa"><option value="">todas</option>{% for e in ETAPAS %}<option value="{{e}}" {% if f.etapa==e %}selected{% endif %}>{{NOME_ETAPA[e]}}</option>{% endfor %}</select></label>
+<label>Situação<select name="status"><option value="">todas</option>{% for s in ["ativo","humano","admitida","desistiu"] %}<option {% if f.status==s %}selected{% endif %}>{{s}}</option>{% endfor %}</select></label>
+<button class="sec">Filtrar</button></form>
+<table><tr><th>Nome</th><th>Cliente / vaga</th><th>Etapa</th><th>Vez de</th><th>Cobranças</th><th>Situação</th><th>Atualizado</th></tr>
+{% for p in lista %}<tr><td><a href="{{b}}/pessoas/{{p.id}}">{{p.nome}}</a><div class="sub">{{p.telefone}}</div></td>
+<td>{{p.cliente or "—"}}<div class="sub">{{p.vaga_funcao or p.funcao or ""}}</div></td>
+<td><span class="tag">{{NOME_ETAPA.get(p.etapa,p.etapa)}}</span></td><td>{{p.aguardando}}</td><td>{{p.cobrancas}}/3</td>
+<td><span class="tag {% if p.status=='humano' %}er{% elif p.status=='admitida' %}ok{% endif %}">{{p.status}}</span></td><td class="sub">{{p.atualizado_em|dt}}</td></tr>
+{% else %}<tr><td colspan="7" class="sub">Ninguém cadastrado ainda.</td></tr>{% endfor %}</table>
+{% endblock %}
