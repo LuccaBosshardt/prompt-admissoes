@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS acoes (
 CREATE TABLE IF NOT EXISTS saida (
   id INTEGER PRIMARY KEY, pessoa_id INTEGER, jid TEXT, texto TEXT, arquivo TEXT,
   enviado INTEGER NOT NULL DEFAULT 0, key_id TEXT, erro TEXT, em TEXT);
+CREATE TABLE IF NOT EXISTS wa_contatos (jid TEXT PRIMARY KEY, apelido TEXT, pessoa_id INTEGER, em TEXT);
 CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY, pessoa_id INTEGER, tipo TEXT, detalhe TEXT, em TEXT);
 """
 
@@ -55,6 +56,7 @@ MIGRACOES = [
     "ALTER TABLE clientes ADD COLUMN contrato_modo TEXT DEFAULT ''",
     "ALTER TABLE itens ADD COLUMN arquivos_extra TEXT DEFAULT '[]'",
     "ALTER TABLE pessoas ADD COLUMN msg_nova INTEGER DEFAULT 0",
+    "ALTER TABLE clientes ADD COLUMN info_vaga TEXT DEFAULT ''",
 ]
 
 DOCS_AEROVIP = ["RG ou CNH", "CPF", "PIS", "Carteira de Trabalho (frente e verso ou digital)",

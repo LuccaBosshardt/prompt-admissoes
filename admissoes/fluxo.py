@@ -21,6 +21,8 @@ def evento(b: Banco, cfg: dict, p: dict, novas: list[dict], agora: datetime) -> 
         "agora": f"{regras.DIAS[agora.weekday()]}, {agora.strftime('%d/%m/%Y %H:%M')}",
         "pessoa": {"nome": p["nome"], "funcao": p["funcao"], "cidade": p["cidade"]},
         "cliente": cl["nome"] if cl else None,
+        "info_da_vaga": (cl or {}).get("info_vaga") or None,
+        "equipe_em_horario": regras.equipe_em_horario(cfg, agora),
         "vaga": {"funcao": v["funcao"], "cidade": v["cidade"], "data_inicio": v["data_inicio"]} if v else None,
         "etapa": p["etapa"],
         "itens": [{"item": i["item"], "tipo": i["grupo"], "descricao": motor.rotulo(i), "status": i["status"],

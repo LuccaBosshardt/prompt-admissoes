@@ -198,3 +198,34 @@ def test_tentativa3_documento_atrasado_aprova_em_qualquer_etapa(b, cfg, aerovip)
     aid = motor.criar_acao(b, p["id"], "documento", {"item_id": it["id"]}, "2ª foto do RG", em(QUI))
     assert motor.aprovar(b, cfg, aid, em(QUI)) == "ok" and b.item(it["id"])["status"] == "aprovado"
     assert b.pessoa(p["id"])["etapa"] == "guia"
+
+
+def test_contrato_digital_por_link_e_assinei(b, cfg, aerovip):
+    p = nova(b, cfg, aerovip)
+    b.atualizar(p["id"], etapa="contrato", aguardando="equipe")
+    aid = motor.criar_acao(b, p["id"], "enviar_contrato", {}, "x", em(QUI))
+    assert motor.aprovar(b, cfg, aid, em(QUI), "remoto") == "ok"
+    assert "link" in b.um("SELECT texto FROM saida ORDER BY id DESC")["texto"]
+    fluxo.receber(b, cfg, p["telefone"], p["jid"], "", "assinei já", "TEXT", None, "ct", em(QUI))
+    fluxo.processar(b, cfg, p["id"], em(QUI), fake({"mensagens": ["Obrigado!"], "contrato_assinado": True}))
+    a = b.um("SELECT * FROM acoes WHERE tipo='contrato' AND status='pendente'")
+    assert a and "contrato digital" in a["resumo"]
+    assert motor.aprovar(b, cfg, a["id"], em(QUI)) == "ok" and b.pessoa(p["id"])["etapa"] == "inicio"
+
+
+def test_duvida_para_equipe_nao_para_o_robo(b, cfg, aerovip):
+    p = nova(b, cfg, aerovip)
+    fluxo.receber(b, cfg, p["telefone"], p["jid"], "", "quanto é o salário?", "TEXT", None, "sal", em(QUI))
+    fluxo.processar(b, cfg, p["id"], em(QUI), fake({"mensagens": ["Vou confirmar com a equipe."], "duvida_para_equipe": "salário"}))
+    q = b.pessoa(p["id"])
+    assert q["status"] == "ativo" and q["msg_nova"] == 1
+
+
+def test_evento_traz_info_da_vaga_e_horario_da_equipe(b, cfg, aerovip):
+    from admissoes import regras
+    b.exec("UPDATE clientes SET info_vaga=? WHERE id=?", "Local: Av. X, 300. Levar marmita.", aerovip)
+    p = nova(b, cfg, aerovip)
+    ev = fluxo.evento(b, cfg, b.pessoa(p["id"]), [], em(QUI))
+    assert ev["info_da_vaga"].startswith("Local: Av. X") and ev["equipe_em_horario"] is True
+    assert regras.equipe_em_horario(cfg, em("2026-11-27T16:10:00")) is False   # sexta depois das 16h
+    assert regras.equipe_em_horario(cfg, em("2026-11-26T16:10:00")) is True    # quinta antes das 16h30

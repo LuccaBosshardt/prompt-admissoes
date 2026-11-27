@@ -1,12 +1,19 @@
 {% extends "base.html" %}{% block corpo %}
-<h1>Visão geral</h1>
+<div class="cab"><div class="icbox">{{ ic("inicio", 22) }}</div><div><h1>Visão geral</h1><p>O que precisa da equipe agora e onde está cada admissão.</p></div></div>
 <div class="grid">
-<a class="card" href="{{b}}/aprovacoes" style="text-decoration:none"><div class="kpi">{{cont.aprov}}<small>aprovações esperando</small></div></a>
-<a class="card" href="{{b}}/humano" style="text-decoration:none"><div class="kpi">{{cont.humano}}<small>precisam de humano</small></div></a>
-<a class="card" href="{{b}}/vagas" style="text-decoration:none"><div class="kpi">{{vagas}}<small>vagas abertas</small></div></a>
-<a class="card" href="{{b}}/estoque" style="text-decoration:none"><div class="kpi">{{estoque}}<small>pessoas no estoque</small></div></a>
+<a class="card kpi {% if cont.aprov %}alerta{% endif %}" href="{{b}}/aprovacoes"><span class="rot">{{ ic("aprovacoes") }}Aprovações esperando</span><span class="num">{{cont.aprov}}</span></a>
+<a class="card kpi {% if cont.humano %}alerta{% endif %}" href="{{b}}/humano"><span class="rot">{{ ic("humano") }}Precisam de humano</span><span class="num">{{cont.humano}}</span></a>
+<a class="card kpi" href="{{b}}/vagas"><span class="rot">{{ ic("vagas") }}Vagas abertas</span><span class="num">{{vagas}}</span></a>
+<a class="card kpi" href="{{b}}/estoque"><span class="rot">{{ ic("estoque") }}Pessoas no estoque</span><span class="num">{{estoque}}</span></a>
 </div>
-<h2>Pessoas com o robô, por etapa</h2>
-<div class="grid">{% for e in ETAPAS %}<a class="card" href="{{b}}/pessoas?etapa={{e}}" style="text-decoration:none"><div class="kpi">{{por_etapa.get(e,0)}}<small>{{NOME_ETAPA[e]}}</small></div></a>{% endfor %}</div>
-<div class="card"><b>Como funciona:</b> o DP cadastra a pessoa aprovada em <a href="{{b}}/pessoas">Pessoas</a>. O robô manda os parabéns e a lista de documentos, cobra até 3 vezes por etapa e traz para <a href="{{b}}/aprovacoes">Aprovações</a> cada decisão (documento, data do exame, guia, contrato, data de início). Sem resposta após 3 cobranças, o caso vai para <a href="{{b}}/humano">Precisa de humano</a>.</div>
+<h2>Admissões com o robô, por etapa</h2>
+{% set icones = {"documentos":"arquivo","exame":"calendario","guia":"exame","contrato":"clientes","inicio":"relogio","concluida":"ok"} %}
+<div class="grid">{% for e in ETAPAS %}<a class="card kpi" href="{{b}}/pessoas?etapa={{e}}"><span class="rot">{{ ic(icones[e]) }}{{NOME_ETAPA[e]}}</span><span class="num">{{por_etapa.get(e,0)}}</span></a>{% endfor %}</div>
+<div class="card"><h2>Como funciona</h2>
+<ol style="margin:0;padding-left:20px;line-height:1.8;color:var(--ink-2)">
+<li>O DP cadastra em <a href="{{b}}/pessoas">Pessoas</a> quem o RH aprovou.</li>
+<li>O robô manda os parabéns e a lista de documentos, e cobra até 3 vezes por etapa.</li>
+<li>Cada decisão (documento, exame, guia, contrato, início) chega em <a href="{{b}}/aprovacoes">Aprovações</a>.</li>
+<li>Sem resposta depois de 3 cobranças, o caso vai para <a href="{{b}}/humano">Precisa de humano</a>.</li>
+</ol></div>
 {% endblock %}

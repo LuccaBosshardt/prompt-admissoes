@@ -27,6 +27,15 @@ def na_janela(cfg: dict, quando: datetime) -> bool:
     return q.weekday() in j["dias"] and _hm(j["inicio"]) <= q.time() < _hm(j["fim"])
 
 
+def equipe_em_horario(cfg: dict, quando: datetime) -> bool:
+    """Horário real do DP (conversas): seg–qui 08h–16h30, sex 08h–16h, sem feriado."""
+    q = quando.astimezone(fuso(cfg))
+    if q.weekday() > 4 or feriado(cfg, q.date()):
+        return False
+    fim = time(16, 0) if q.weekday() == 4 else time(16, 30)
+    return time(8, 0) <= q.time() < fim
+
+
 def feriado(cfg: dict, d: date) -> bool:
     return d.isoformat() in set(cfg.get("feriados", []))
 

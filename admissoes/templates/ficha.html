@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block corpo %}
-<h1>{{p.nome}} <span class="tag">{{NOME_ETAPA.get(p.etapa,p.etapa)}}</span> <span class="tag {% if p.status=='humano' %}er{% elif p.status=='admitida' %}ok{% endif %}">{{ROTULO.status.get(p.status,p.status)}}</span></h1>
-<p class="sub">{{p.telefone}} · {{cliente.nome if cliente else "sem cliente"}} · {{p.funcao or ""}} {{p.cidade or ""}} · a vez é <b>{{ROTULO.aguardando.get(p.aguardando,p.aguardando)}}</b> · cobranças sem resposta nesta etapa: {{p.cobrancas}} de 3{% if p.faltas %} · faltas no exame {{p.faltas}}{% endif %}
-{% if p.pausa_ate %} · robô pausado até {{p.pausa_ate|dt}}{% endif %}</p>
+<div class="cab"><div class="icbox">{{ ic("pessoa", 22) }}</div><div><h1>{{p.nome}} <span class="tag">{{NOME_ETAPA.get(p.etapa,p.etapa)}}</span> <span class="tag {% if p.status=='humano' %}er{% elif p.status=='admitida' %}ok{% endif %}">{{ROTULO.status.get(p.status,p.status)}}</span></h1>
+<p>{{p.telefone}} · {{cliente.nome if cliente else "sem cliente"}} · {{p.funcao or ""}} {{p.cidade or ""}} · a vez é <b>{{ROTULO.aguardando.get(p.aguardando,p.aguardando)}}</b> · cobranças sem resposta nesta etapa: {{p.cobrancas}} de 3{% if p.faltas %} · faltas no exame {{p.faltas}}{% endif %}
+{% if p.pausa_ate %} · robô pausado até {{p.pausa_ate|dt}}{% endif %}</p></div></div>
 {% if p.status=='humano' %}<div class="aviso">Precisa de humano: {{p.motivo_humano}}</div>{% endif %}
 {% if p.msg_nova %}<div class="aviso">A pessoa mandou mensagem e o robô não responde ({{ROTULO.status.get(p.status,p.status)}}). Responda abaixo ou <form method="post" action="{{b}}/pessoas/{{p.id}}/acao" style="display:inline"><button class="sec" name="op" value="lida">marcar como vista</button></form></div>{% endif %}
 <div class="cols"><div>
@@ -32,7 +32,7 @@
 {% if p.status!='desistiu' %}<button name="op" value="desistiu" class="no" onclick="return confirm('Marcar como desistiu?')">Desistiu</button>{% endif %}</form>
 </div></div>
 <div><div class="card"><h2 style="margin-top:0">Conversa</h2><div class="chat">
-{% for m in msgs %}<div class="m {{m.quem}}">{{m.texto or ""}}{% if m.arquivo %}<br>{% if m.tipo=='IMAGE' %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank"><img class="doc" src="{{b}}/arquivo/msg/{{m.id}}"></a>{% else %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank">📎 anexo</a>{% endif %}
+{% for m in msgs %}<div class="m {{m.quem}}">{{m.texto or ""}}{% if m.arquivo %}<br>{% if m.tipo=='IMAGE' %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank"><img class="doc" src="{{b}}/arquivo/msg/{{m.id}}"></a>{% else %}<a href="{{b}}/arquivo/msg/{{m.id}}" target="_blank">{{ ic("anexo", 16) }} anexo</a>{% endif %}
 {% if m.quem=='pessoa' %}<form method="post" action="{{b}}/pessoas/{{p.id}}/acao" class="linha" style="margin-top:4px"><input type="hidden" name="op" value="usar_anexo"><input type="hidden" name="texto" value="{{m.id}}"><select name="item_id" style="font-size:12px;max-width:190px"><option value="">usar como…</option>{% for i in itens if i.grupo!='info' and i.status!='aprovado' %}<option value="{{i.id}}">{{i.item}}</option>{% endfor %}</select><button class="sec" style="padding:4px 8px;font-size:12px">Aprovar como este</button></form>{% endif %}{% endif %}<small>{{m.quem}} · {{m.em|dt}}</small></div>{% else %}<p class="sub">Sem mensagens.</p>{% endfor %}
 </div></div>
 <div class="card"><h2 style="margin-top:0">Registro</h2>{% for l in log %}<div class="sub">{{l.em|dt}} · <b>{{l.tipo}}</b> {{l.detalhe[:160]}}</div>{% endfor %}</div></div></div>

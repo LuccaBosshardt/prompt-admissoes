@@ -11,8 +11,9 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 
 from . import agente, clinicas, config, gateway, motor, regras, whatsapp
 from .banco import Banco
@@ -28,6 +29,16 @@ ROTULO = {"aguardando": {"pessoa": "do candidato", "equipe": "da equipe", "exame
           "status": {"ativo": "com o robô", "humano": "precisa de humano", "admitida": "admitida", "desistiu": "desistiu"},
           "item": {"pendente": "falta", "recebido": "chegou (aprovar)", "aprovado": "ok", "recusado": "pedido de novo"}}
 T.env.globals.update(ROTULO=ROTULO)
+
+
+def _ic(nome: str, tam: int = 18, cls: str = "") -> Markup:
+    return Markup(f'<svg class="ic {cls}" width="{tam}" height="{tam}" aria-hidden="true" focusable="false">'
+                  f'<use href="#i-{nome}"/></svg>')
+
+
+T.env.globals["ic"] = _ic
+ESTATICOS = {"logo-prompt.png", "logo-prompt-768.png", "favicon.png"}
+STATIC = Path(__file__).parent / "static"
 T.env.filters["json"] = lambda x: json.loads(x or "[]")
 T.env.filters["dia"] = lambda x: regras.fmt_data(date.fromisoformat(x)) if x else ""
 
@@ -67,12 +78,21 @@ def _r(req: Request, seg: str, nome: str, **ctx):
         "aprov": BANCO.um("SELECT COUNT(*) n FROM acoes WHERE status='pendente'")["n"],
         "humano": BANCO.um("SELECT COUNT(*) n FROM pessoas WHERE status='humano' OR msg_nova=1")["n"],
     }
-    return T.TemplateResponse(req, nome, {"b": _base(seg), "cont": cont, "msg": req.query_params.get("msg", ""),
+    atual = req.url.path.split(f"/p/{seg}", 1)[-1].strip("/").split("/")[0] or "inicio"
+    return T.TemplateResponse(req, nome, {"b": _base(seg), "cont": cont, "msg": req.query_params.get("msg", ""), "atual": atual,
                                           "envio_ligado": config.chaves(CFG).get("envio_ligado"), **ctx})
 
 
 def _agora():
     return regras.agora(CFG)
+
+
+@app.get("/p/{seg}/static/{nome}")
+def estatico(seg: str, nome: str):
+    _ok(seg)
+    if nome not in ESTATICOS:
+        raise HTTPException(404)
+    return FileResponse(STATIC / nome, headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
@@ -323,7 +343,7 @@ def clientes(req: Request, seg: str, id: int | None = None):
 
 @app.post("/p/{seg}/clientes/{cid}")
 async def cliente_salvar(seg: str, cid: int, nome: str = Form(...), documentos: str = Form(""), documentos_filhos: str = Form(""),
-                         infos: str = Form(""), clinica_id: str = Form(""), texto_inicial: str = Form(""), contrato_modo: str = Form(""),
+                         infos: str = Form(""), clinica_id: str = Form(""), texto_inicial: str = Form(""), contrato_modo: str = Form(""), info_vaga: str = Form(""),
                          contrato: UploadFile | None = File(None)):
     _ok(seg)
     linhas = lambda t: [x.strip() for x in t.splitlines() if x.strip()]  # noqa: E731
@@ -342,7 +362,8 @@ async def cliente_salvar(seg: str, cid: int, nome: str = Form(...), documentos: 
     BANCO.exec("UPDATE clientes SET nome=?, documentos=?, documentos_filhos=?, infos=?, clinica_id=?, textos=json_set(textos, '$.inicial', ?) WHERE id=?",
                nome.strip(), json.dumps(linhas(documentos), ensure_ascii=False), json.dumps(linhas(documentos_filhos), ensure_ascii=False),
                json.dumps(inf, ensure_ascii=False), int(clinica_id) if clinica_id else None, texto_inicial, cid)
-    BANCO.exec("UPDATE clientes SET contrato_modo=? WHERE id=?", contrato_modo if contrato_modo in ("presencial", "remoto") else "", cid)
+    BANCO.exec("UPDATE clientes SET contrato_modo=?, info_vaga=? WHERE id=?", contrato_modo if contrato_modo in ("presencial", "remoto") else "",
+               info_vaga.replace("<<<EVENTO", "").replace("EVENTO>>>", "").strip()[:2500], cid)
     if contrato is not None and contrato.filename:
         if not contrato.filename.lower().endswith(".pdf"):
             return _ir(seg, f"/clientes?id={cid}", "O contrato precisa ser PDF.")
@@ -521,6 +542,96 @@ def agente_testar(req: Request, seg: str, texto: str = Form(...), etapa: str = F
               logs=BANCO.todos("SELECT l.*, p.nome FROM log l LEFT JOIN pessoas p ON p.id=l.pessoa_id WHERE l.tipo IN "
                                "('hermes','erro_hermes','erro_turno','erro_envio','hermes_descartado') ORDER BY l.id DESC LIMIT 12"),
               teste=teste)
+
+
+# ---------------- tela WhatsApp ----------------
+@app.get("/p/{seg}/whatsapp", response_class=HTMLResponse)
+def whatsapp_tela(req: Request, seg: str):
+    _ok(seg)
+    est = gateway.estado(CFG)
+    return _r(req, seg, "whatsapp.html", est=est)
+
+
+def _pessoas_por_tel() -> dict:
+    return {motor.chave_tel(p["telefone"]): p for p in BANCO.todos(
+        "SELECT p.id, p.nome, p.telefone, p.etapa, p.status, c.nome cliente FROM pessoas p LEFT JOIN clientes c ON c.id=p.cliente_id "
+        "WHERE p.status!='desistiu'")}
+
+
+@app.get("/p/{seg}/whatsapp/conversas.json")
+def whatsapp_conversas(seg: str):
+    _ok(seg)
+    try:
+        lista = gateway.conversas(CFG)
+    except gateway.GatewayErro as e:
+        return JSONResponse({"erro": str(e)}, 503)
+    idx = _pessoas_por_tel()
+    ligados = {r["jid"]: r for r in BANCO.todos("SELECT * FROM wa_contatos")}
+    for c in lista:
+        lg = ligados.get(c["jid"])
+        if lg and lg["apelido"]:
+            c["nome"] = lg["apelido"]
+        c["sem_nome"] = c["nome"] == c["jid"].split("@")[0] and not (lg and lg["apelido"])
+        p = idx.get(motor.chave_tel(c["jid"].split("@")[0])) if c["jid"].endswith("@s.whatsapp.net") else None
+        if lg and lg["pessoa_id"]:
+            q = BANCO.um("SELECT p.id, p.etapa, c.nome cliente FROM pessoas p LEFT JOIN clientes c ON c.id=p.cliente_id WHERE p.id=?", lg["pessoa_id"])
+            p = q or p
+        c["pessoa"] = {"id": p["id"], "etapa": motor.NOME_ETAPA.get(p["etapa"], p["etapa"]), "cliente": p["cliente"]} if p else None
+    return {"conversas": lista}
+
+
+@app.get("/p/{seg}/whatsapp/pessoas.json")
+def whatsapp_pessoas(seg: str):
+    _ok(seg)
+    return {"pessoas": BANCO.todos("SELECT p.id, p.nome, c.nome cliente FROM pessoas p LEFT JOIN clientes c ON c.id=p.cliente_id "
+                                   "WHERE p.status!='desistiu' AND p.cliente_id IS NOT NULL ORDER BY p.nome")}
+
+
+@app.post("/p/{seg}/whatsapp/contato")
+def whatsapp_contato(seg: str, jid: str = Form(...), apelido: str = Form(""), pessoa_id: str = Form("")):
+    _ok(seg)
+    apelido = " ".join(apelido.split())[:60]
+    pid = int(pessoa_id) if pessoa_id.isdigit() and BANCO.um("SELECT id FROM pessoas WHERE id=?", int(pessoa_id)) else None
+    if pid and not apelido:
+        apelido = BANCO.um("SELECT nome FROM pessoas WHERE id=?", pid)["nome"]
+    BANCO.exec("INSERT INTO wa_contatos (jid, apelido, pessoa_id, em) VALUES (?,?,?,?) ON CONFLICT(jid) DO UPDATE SET "
+               "apelido=excluded.apelido, pessoa_id=excluded.pessoa_id, em=excluded.em", jid[:120], apelido, pid, _agora().isoformat())
+    return {"ok": True, "apelido": apelido, "pessoa_id": pid}
+
+
+@app.get("/p/{seg}/whatsapp/mensagens.json")
+def whatsapp_mensagens(seg: str, jid: str):
+    _ok(seg)
+    try:
+        return {"mensagens": gateway.mensagens(CFG, jid)}
+    except gateway.GatewayErro as e:
+        return JSONResponse({"erro": str(e)}, 503)
+
+
+@app.get("/p/{seg}/whatsapp/midia/{nome}")
+def whatsapp_midia(seg: str, nome: str):
+    _ok(seg)
+    try:
+        corpo, tipo = gateway.midia(CFG, nome)
+    except gateway.GatewayErro:
+        raise HTTPException(404)
+    return Response(corpo, media_type=tipo, headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.post("/p/{seg}/whatsapp/enviar")
+def whatsapp_enviar(seg: str, jid: str = Form(...), texto: str = Form(...)):
+    _ok(seg)
+    texto = texto.strip()
+    if not texto or len(texto) > 4000:
+        return JSONResponse({"erro": "mensagem vazia ou longa demais"}, 400)
+    if not (jid.endswith("@s.whatsapp.net") or jid.endswith("@g.us") or jid.endswith("@lid")):
+        return JSONResponse({"erro": "conversa inválida"}, 400)
+    try:
+        kid = gateway.enviar_humano(CFG, jid, texto)
+    except gateway.GatewayErro as e:
+        return JSONResponse({"erro": str(e)}, 503)
+    BANCO.log(None, "whatsapp_humano", f"{jid.split('@')[0][-4:]}: {texto[:120]}")
+    return {"ok": True, "id": kid}
 
 
 # ---------------- caixa de saída ----------------

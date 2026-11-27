@@ -149,3 +149,57 @@ def test_botao_nao_apaga_outras_chaves(wa):
     c.post(base + "/agente/chaves", data={"cobranca": "0"})
     d = json.loads((Path(painel.CFG["dados_dir"]) / "chaves.json").read_text())
     assert d["cobranca_em_seco"] is True and d["cobranca_ligada"] is False
+
+
+def test_tela_whatsapp(monkeypatch):
+    chamadas = []
+
+    def fake(cfg, metodo, caminho, corpo=None, timeout=15):
+        chamadas.append((metodo, caminho, corpo))
+        if caminho == "/api/sessions/prompt":
+            return 200, {"data": {"status": "CONNECTED"}}
+        if caminho.startswith("/api/webhooks"):
+            return 200, {"data": []}
+        if caminho == "/api/chat/prompt":
+            return 200, {"data": [{"jid": "5511955551111@s.whatsapp.net", "name": "Fulano", "lastMessage": {"content": "oi", "timestamp": "2026-11-27T10:00:00Z", "type": "TEXT"}},
+                                  {"jid": "status@broadcast", "name": "x", "lastMessage": {}},
+                                  {"jid": "1203@g.us", "name": "Grupo", "lastMessage": {"content": "", "timestamp": "2026-11-26T10:00:00Z", "type": "IMAGE"}}]}
+        if caminho.startswith("/api/chat/prompt/"):
+            return 200, {"data": [{"keyId": "B", "fromMe": True, "type": "TEXT", "content": "resposta", "timestamp": "2026-11-27T10:01:00Z", "status": "READ"},
+                                  {"keyId": "A", "fromMe": False, "type": "IMAGE", "content": "", "mediaUrl": "/api/media/prompt-A.jpeg", "timestamp": "2026-11-27T10:00:00Z"}]}
+        if caminho.endswith("/send"):
+            return 200, {"data": {"key": {"id": "NOVO1"}}}
+        return 404, {}
+    monkeypatch.setattr(gateway, "_api", fake)
+    c, base = _c()
+    cid = painel.BANCO.um("SELECT id FROM clientes WHERE nome='Aerovip'")["id"]
+    if not motor.achar_por_tel(painel.BANCO, "5511955551111"):
+        motor.cadastrar(painel.BANCO, painel.CFG, "Fulano Tal", "11955551111", cid, em("2026-11-26T10:00:00"))
+    assert c.get(base + "/whatsapp").status_code == 200
+    conv = c.get(base + "/whatsapp/conversas.json").json()["conversas"]
+    assert [x["nome"] for x in conv] == ["Fulano", "Grupo"] and conv[0]["pessoa"]["etapa"] and conv[1]["grupo"]
+    msgs = c.get(base + "/whatsapp/mensagens.json", params={"jid": "5511955551111@s.whatsapp.net"}).json()["mensagens"]
+    assert [m["id"] for m in msgs] == ["A", "B"] and msgs[0]["midia"] == "prompt-A.jpeg"
+    assert c.get(base + "/whatsapp/midia/..%2Fsegredo").status_code == 404
+    assert c.post(base + "/whatsapp/enviar", data={"jid": "x", "texto": "oi"}).status_code == 400
+    assert c.post(base + "/whatsapp/enviar", data={"jid": "5511955551111@s.whatsapp.net", "texto": "  "}).status_code == 400
+    r = c.post(base + "/whatsapp/enviar", data={"jid": "5511955551111@s.whatsapp.net", "texto": "Olá, aqui é a equipe"})
+    assert r.json()["id"] == "NOVO1"
+    assert [x for x in chamadas if x[1].endswith("/send")][0][2] == {"message": {"text": "Olá, aqui é a equipe"}}
+
+
+def test_nomear_e_ligar_contato_lid(monkeypatch):
+    def fake(cfg, metodo, caminho, corpo=None, timeout=15):
+        if caminho == "/api/chat/prompt":
+            return 200, {"data": [{"jid": "1999888777@lid", "name": None, "lastMessage": {"content": "oi", "timestamp": "2026-11-27T10:00:00Z"}}]}
+        return 200, {"data": {"status": "CONNECTED"}}
+    monkeypatch.setattr(gateway, "_api", fake)
+    c, base = _c()
+    conv = c.get(base + "/whatsapp/conversas.json").json()["conversas"][0]
+    assert conv["sem_nome"] and conv["pessoa"] is None
+    cid = painel.BANCO.um("SELECT id FROM clientes WHERE nome='Aerovip'")["id"]
+    p = motor.cadastrar(painel.BANCO, painel.CFG, "Lid Pessoa", "11944443333", cid, em("2026-11-26T10:00:00"))
+    r = c.post(base + "/whatsapp/contato", data={"jid": "1999888777@lid", "apelido": "", "pessoa_id": str(p["id"])}).json()
+    assert r["apelido"] == "Lid Pessoa"
+    conv = c.get(base + "/whatsapp/conversas.json").json()["conversas"][0]
+    assert conv["nome"] == "Lid Pessoa" and conv["pessoa"]["id"] == p["id"] and not conv["sem_nome"]

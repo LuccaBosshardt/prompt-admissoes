@@ -1,0 +1,190 @@
+{% extends "base.html" %}{% block corpo %}
+<style>
+/* Tela no estilo do WhatsApp Web (cores e formas), sem marca de terceiros */
+main{max-width:none;padding-bottom:16px}
+.wa{grid-template-rows:minmax(0,1fr);--wa-verde:#00a884;--wa-verde-esc:#008069;--wa-barra:#f0f2f5;--wa-fundo:#efeae2;--wa-eu:#d9fdd3;--wa-linha:#e9edef;--wa-txt:#111b21;--wa-txt2:#667781;
+  display:grid;grid-template-columns:minmax(280px,380px) 1fr;height:calc(100dvh - 150px);min-height:480px;border:1px solid var(--wa-linha);border-radius:var(--r);overflow:hidden;background:#fff;box-shadow:var(--sh)}
+.wa-lista{display:flex;flex-direction:column;border-right:1px solid var(--wa-linha);min-width:0;min-height:0}
+.wa-conv,#conv{min-height:0}
+.wa-ligar{display:none;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:10px 16px;background:#fff;border-bottom:1px solid var(--wa-linha)}
+.wa-ligar.aberto{display:flex}.wa-ligar label{display:flex;flex-direction:column;gap:3px;font-size:13px}
+.wa-topo{background:var(--wa-barra);min-height:60px;display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--wa-linha)}
+.wa-topo b{font-size:16px;color:var(--wa-txt)}
+.wa-busca{padding:8px 12px;border-bottom:1px solid var(--wa-linha)}
+.wa-busca div{display:flex;align-items:center;gap:10px;background:var(--wa-barra);border-radius:8px;padding:0 12px;color:var(--wa-txt2)}
+.wa-busca input{border:0;background:transparent;min-height:36px;width:100%;box-shadow:none;padding:0;font-size:14px}
+.wa-busca input:focus{box-shadow:none}
+.wa-filtros{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--wa-linha)}
+.wa-filtros button{min-height:30px;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:500;background:var(--wa-barra);color:var(--wa-txt2);border:0}
+.wa-filtros button[aria-pressed="true"]{background:#d9fdd3;color:var(--wa-verde-esc)}
+.wa-itens{overflow-y:auto;flex:1}
+.wa-item{display:flex;gap:12px;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #f5f6f6;transition:background var(--t);width:100%;text-align:left;background:#fff;border-radius:0;min-height:72px;color:inherit;font-weight:400}
+.wa-item:hover{background:#f5f6f6}.wa-item[aria-current="true"]{background:#f0f2f5}
+.wa-av{width:46px;height:46px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:600;color:#fff;font-size:16px}
+.wa-meio{min-width:0;flex:1}
+.wa-l1{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.wa-nome{font-size:16px;color:var(--wa-txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wa-hora{font-size:12px;color:var(--wa-txt2);flex:none;font-variant-numeric:tabular-nums}
+.wa-prev{font-size:14px;color:var(--wa-txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}
+.wa-adm{font-size:11px;font-weight:600;color:var(--brand-600);background:var(--brand-50);border-radius:4px;padding:0 6px;margin-left:6px}
+.wa-conv{display:flex;flex-direction:column;min-width:0;background:var(--wa-fundo)}
+.wa-cab{background:var(--wa-barra);min-height:60px;display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--wa-linha)}
+.wa-cab .wa-av{width:40px;height:40px;font-size:14px}
+.wa-cab .t{min-width:0;flex:1}.wa-cab .t b{display:block;color:var(--wa-txt);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wa-cab .t span{font-size:13px;color:var(--wa-txt2)}
+.wa-voltar{display:none;background:transparent;color:var(--wa-txt2);min-height:40px;padding:6px;border:0}
+.wa-msgs{flex:1;overflow-y:auto;padding:16px 7%;display:flex;flex-direction:column;gap:2px;
+  background-color:var(--wa-fundo);background-image:radial-gradient(rgba(0,0,0,.035) 1px,transparent 1px);background-size:18px 18px}
+.wa-dia{align-self:center;background:#fff;color:var(--wa-txt2);font-size:12.5px;padding:5px 12px;border-radius:8px;margin:10px 0 6px;box-shadow:0 1px .5px rgba(11,20,26,.13)}
+.wa-b{max-width:min(65%,560px);padding:6px 8px 8px 9px;border-radius:8px;font-size:14.5px;line-height:1.38;color:var(--wa-txt);box-shadow:0 1px .5px rgba(11,20,26,.13);position:relative;white-space:pre-wrap;word-wrap:break-word;margin-top:2px}
+.wa-b.ele{align-self:flex-start;background:#fff;border-top-left-radius:0}
+.wa-b.eu{align-self:flex-end;background:var(--wa-eu);border-top-right-radius:0}
+.wa-b .aut{display:block;font-size:12.5px;font-weight:600;color:#1f7aec;margin-bottom:2px}
+.wa-b .rod{float:right;margin:6px 0 -4px 10px;font-size:11px;color:var(--wa-txt2);display:inline-flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums}
+.wa-b .rod .ic{color:#53bdeb}
+.wa-b img{display:block;max-width:300px;width:100%;border-radius:6px;margin-bottom:4px;cursor:zoom-in}
+.wa-b a.doc{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.05);border-radius:6px;padding:8px 10px;color:var(--wa-txt);text-decoration:none;margin-bottom:4px}
+.wa-b .mid{color:var(--wa-txt2);font-style:italic}
+.wa-escrever{background:var(--wa-barra);padding:8px 14px;display:flex;gap:10px;align-items:flex-end}
+.wa-escrever textarea{flex:1;min-height:42px;max-height:140px;resize:none;border:0;border-radius:8px;padding:10px 12px;font-size:15px;box-shadow:none}
+.wa-escrever textarea:focus{box-shadow:0 0 0 2px var(--wa-verde)}
+.wa-env{width:44px;height:44px;min-height:44px;border-radius:50%;padding:0;background:var(--wa-verde)}.wa-env:hover{background:var(--wa-verde-esc)}
+.wa-nota{font-size:12.5px;color:var(--wa-txt2);padding:4px 16px 8px;background:var(--wa-barra)}
+.wa-vazio{flex:1;display:grid;place-items:center;text-align:center;color:var(--wa-txt2);padding:24px;background:#f8f9fa}
+.wa-vazio .ic{color:#c4c8cf}
+@media (max-width:1023px){
+  .wa{grid-template-columns:1fr;height:calc(100dvh - 170px)}
+  .wa.aberta .wa-lista{display:none}.wa:not(.aberta) .wa-conv{display:none}
+  .wa-voltar{display:inline-flex}
+  .wa-msgs{padding:12px 10px}.wa-b{max-width:85%}
+}
+</style>
+{% if not est.sessao or est.status != 'CONNECTED' %}
+<div class="aviso" role="status">{{ ic("alerta") }}<div>O WhatsApp do robô não está conectado ({{ est.status }}). Conecte em <a href="{{b}}/agente">Agente e WhatsApp</a> para ver as conversas.</div></div>
+{% endif %}
+<div class="wa" id="wa">
+  <section class="wa-lista" aria-label="Conversas">
+    <div class="wa-topo">{{ ic("whats", 22) }}<b>Conversas</b><span class="sub" style="margin-left:auto">{% if est.numero %}+{{est.numero}}{% endif %}</span></div>
+    <div class="wa-busca"><div>{{ ic("busca", 16) }}<input id="busca" type="search" placeholder="Pesquisar conversa" aria-label="Pesquisar conversa"></div></div>
+    <div class="wa-filtros" role="group" aria-label="Filtro">
+      <button type="button" data-f="todas" aria-pressed="true">Todas</button>
+      <button type="button" data-f="adm" aria-pressed="false">Admissão</button>
+      <button type="button" data-f="contatos" aria-pressed="false">Contatos</button>
+      <button type="button" data-f="grupos" aria-pressed="false">Grupos</button>
+    </div>
+    <div class="wa-itens" id="itens" role="list"><div class="wa-vazio">Carregando…</div></div>
+  </section>
+  <section class="wa-conv" aria-label="Conversa aberta">
+    <div class="wa-vazio" id="semconv"><div>{{ ic("whats", 56) }}<p style="font-size:18px;color:#41525d;margin:10px 0 4px">Prompt Admissões no WhatsApp</p><p class="sub">Escolha uma conversa à esquerda.</p></div></div>
+    <div id="conv" style="display:none;flex-direction:column;height:100%;min-height:0">
+      <div class="wa-cab"><button class="wa-voltar" type="button" id="voltar" aria-label="Voltar para a lista">{{ ic("voltar", 22) }}</button>
+        <div class="wa-av" id="cav"></div><div class="t"><b id="cnome"></b><span id="cinfo"></span></div>
+        <a id="cficha" class="btn sec" style="display:none;min-height:36px;padding:6px 12px;font-size:13px">{{ ic("pessoa", 16) }}Ver ficha</a>
+        <button type="button" id="bligar" class="sec peq" aria-expanded="false" aria-controls="ligar">{{ ic("usuario", 16) }}Nomear / ligar</button></div>
+      <form class="wa-ligar" id="ligar"><label>Nome do contato<input id="lapelido" maxlength="60" placeholder="Ex.: Maria (candidata Aerovip)"></label>
+        <label>Pessoa da admissão<select id="lpessoa"><option value="">— nenhuma —</option></select></label>
+        <button class="peq" type="submit">Salvar</button><span class="sub">O WhatsApp esconde o nome e o telefone deste contato. Dê um nome ou ligue à ficha.</span></form>
+      <div class="wa-msgs" id="msgs" aria-live="polite"></div>
+      <div class="wa-nota">Mensagem escrita aqui sai de verdade no WhatsApp, mesmo em modo seco. O robô pausa 12 h nessa pessoa.</div>
+      <form class="wa-escrever" id="form"><label for="texto" class="sub" style="position:absolute;left:-999px">Mensagem</label>
+        <textarea id="texto" rows="1" placeholder="Digite uma mensagem" maxlength="4000"></textarea>
+        <button class="wa-env" type="submit" aria-label="Enviar">{{ ic("saida", 20) }}</button></form>
+    </div>
+  </section>
+</div>
+<script>
+(function(){
+const B = {{ b|tojson }};
+const CORES = ["#7f66ff","#00a884","#ff7aa2","#53bdeb","#fa6533","#25d366","#a5b337","#e27e6f","#4fb3c8","#c867c8"];
+let conversas = [], atual = null, filtro = "todas", ultimoTotal = 0;
+const $ = id => document.getElementById(id);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const icone = (n, t=16) => { const ns="http://www.w3.org/2000/svg"; const s=document.createElementNS(ns,"svg"); s.setAttribute("class","ic"); s.setAttribute("width",t); s.setAttribute("height",t); s.setAttribute("aria-hidden","true"); const u=document.createElementNS(ns,"use"); u.setAttribute("href","#i-"+n); s.appendChild(u); return s; };
+const cor = s => CORES[[...s].reduce((a,c)=>a+c.charCodeAt(0),0) % CORES.length];
+const iniciais = n => (n||"?").replace(/[^\p{L}\p{N} ]/gu,"").trim().split(/\s+/).slice(0,2).map(p=>p[0]||"").join("").toUpperCase() || "?";
+const hora = iso => { if(!iso) return ""; const d=new Date(iso), h=new Date(); const mesmoDia=d.toDateString()===h.toDateString();
+  return mesmoDia ? d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}); };
+const dia = iso => { const d=new Date(iso), h=new Date(), o=new Date(); o.setDate(h.getDate()-1);
+  if (d.toDateString()===h.toDateString()) return "Hoje"; if (d.toDateString()===o.toDateString()) return "Ontem";
+  return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}); };
+const previa = c => ({IMAGE:"Foto",DOCUMENT:"Documento",AUDIO:"Áudio",PTT:"Áudio",VIDEO:"Vídeo",STICKER:"Figurinha",CONTACT:"Contato"}[c.tipo] || c.ultima || "");
+function avatar(e, nome){ e.textContent = iniciais(nome); e.style.background = cor(nome||"?"); }
+
+function desenharLista(){
+  const q = $("busca").value.trim().toLowerCase(), box = $("itens"); box.textContent = "";
+  const lista = conversas.filter(c => (filtro==="todas" || (filtro==="adm" && c.pessoa) || (filtro==="grupos" && c.grupo) || (filtro==="contatos" && !c.grupo))
+    && (!q || c.nome.toLowerCase().includes(q) || (c.ultima||"").toLowerCase().includes(q)));
+  if (!lista.length){ box.appendChild(el("div","wa-vazio","Nenhuma conversa.")); return; }
+  for (const c of lista){
+    const b = el("button","wa-item"); b.type="button"; b.setAttribute("role","listitem"); if (atual && atual.jid===c.jid) b.setAttribute("aria-current","true");
+    const av = el("div","wa-av"); if (c.sem_nome){ av.style.background="#dfe5e7"; av.style.color="#fff"; av.appendChild(icone("usuario",24)); } else avatar(av, c.nome);
+    const meio = el("div","wa-meio"), l1 = el("div","wa-l1"), nome = el("span","wa-nome", c.sem_nome ? "Contato " + c.nome.slice(-4) : c.nome);
+    if (c.pessoa) nome.appendChild(el("span","wa-adm","Admissão"));
+    l1.append(nome, el("span","wa-hora", hora(c.quando)));
+    const pv = el("div","wa-prev"); if (c.grupo) pv.appendChild(icone("pessoas",14)); pv.appendChild(document.createTextNode(previa(c)));
+    meio.append(l1, pv); b.append(av, meio); b.onclick = () => abrir(c); box.appendChild(b);
+  }
+}
+async function carregarLista(){
+  try { const r = await fetch(B + "/whatsapp/conversas.json"); const d = await r.json();
+    if (d.erro){ $("itens").textContent=""; $("itens").appendChild(el("div","wa-vazio", d.erro)); return; }
+    conversas = d.conversas; desenharLista(); } catch(e){}
+}
+function bolha(m, grupo){
+  const b = el("div","wa-b " + (m.eu ? "eu" : "ele"));
+  if (grupo && !m.eu && m.autor) b.appendChild(el("span","aut", m.autor));
+  if (m.midia){
+    const url = B + "/whatsapp/midia/" + encodeURIComponent(m.midia);
+    if (m.tipo === "IMAGE" || m.tipo === "STICKER"){ const a = el("a"); a.href=url; a.target="_blank"; a.rel="noopener"; const i = el("img"); i.loading="lazy"; i.alt="Foto recebida"; i.src=url; a.appendChild(i); b.appendChild(a); }
+    else { const a = el("a","doc"); a.href=url; a.target="_blank"; a.rel="noopener"; a.append(icone(m.tipo==="AUDIO"||m.tipo==="PTT"?"microfone":"arquivo",20), el("span",null, m.tipo==="AUDIO"||m.tipo==="PTT" ? "Áudio (abrir)" : (m.texto || "Documento"))); b.appendChild(a); }
+  } else if (m.tipo !== "TEXT" && !m.texto){ b.appendChild(el("span","mid", previa({tipo:m.tipo}) || m.tipo)); }
+  if (m.texto && !(m.midia && m.tipo==="DOCUMENT")) b.appendChild(document.createTextNode(m.texto));
+  const rod = el("span","rod", hora(m.quando).length>5 ? new Date(m.quando).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : hora(m.quando));
+  if (m.eu) rod.appendChild(icone(m.status==="READ"||m.status==="DELIVERED"?"checks":"check",15));
+  b.appendChild(rod); return b;
+}
+async function carregarMsgs(rolar){
+  if (!atual) return; const jid = atual.jid;
+  try { const r = await fetch(B + "/whatsapp/mensagens.json?jid=" + encodeURIComponent(jid)); const d = await r.json();
+    if (!atual || atual.jid !== jid) return;
+    const box = $("msgs"); if (d.erro){ box.textContent=""; box.appendChild(el("div","wa-dia", d.erro)); return; }
+    if (!rolar && d.mensagens.length === ultimoTotal) return;
+    const perto = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+    ultimoTotal = d.mensagens.length; box.textContent = ""; let ult = "";
+    for (const m of d.mensagens){ const dd = dia(m.quando); if (dd !== ult){ box.appendChild(el("div","wa-dia", dd)); ult = dd; } box.appendChild(bolha(m, atual.grupo)); }
+    if (rolar || perto) box.scrollTop = box.scrollHeight;
+  } catch(e){}
+}
+function abrir(c){
+  atual = c; ultimoTotal = 0; $("wa").classList.add("aberta"); $("semconv").style.display="none"; $("conv").style.display="flex";
+  avatar($("cav"), c.nome); $("cnome").textContent = c.sem_nome ? "Contato sem nome (…" + c.nome.slice(-4) + ")" : c.nome;
+  $("ligar").classList.remove("aberto"); $("bligar").setAttribute("aria-expanded","false"); $("lapelido").value = c.sem_nome ? "" : c.nome;
+  $("cinfo").textContent = c.pessoa ? ("Admissão · " + (c.pessoa.cliente||"") + " · " + c.pessoa.etapa) : (c.grupo ? "Grupo" : c.jid.split("@")[0]);
+  const f = $("cficha"); if (c.pessoa){ f.href = B + "/pessoas/" + c.pessoa.id; f.style.display="inline-flex"; } else f.style.display="none";
+  $("msgs").textContent=""; desenharLista(); carregarMsgs(true); $("texto").focus();
+}
+$("bligar").onclick = async () => { const f = $("ligar"), ab = !f.classList.contains("aberto"); f.classList.toggle("aberto", ab); $("bligar").setAttribute("aria-expanded", ab);
+  if (ab){ const d = await (await fetch(B + "/whatsapp/pessoas.json")).json(); const s = $("lpessoa"); s.length = 1;
+    for (const p of d.pessoas){ const o = el("option", null, p.nome + (p.cliente ? " · " + p.cliente : "")); o.value = p.id; if (atual.pessoa && atual.pessoa.id===p.id) o.selected = true; s.appendChild(o); }
+    $("lapelido").focus(); } };
+$("ligar").onsubmit = async e => { e.preventDefault(); if (!atual) return; const fd = new FormData(); fd.append("jid", atual.jid);
+  fd.append("apelido", $("lapelido").value); fd.append("pessoa_id", $("lpessoa").value);
+  const d = await (await fetch(B + "/whatsapp/contato", {method:"POST", body:fd})).json();
+  await carregarLista(); const c = conversas.find(x => x.jid === atual.jid); if (c) abrir(c); };
+$("voltar").onclick = () => { atual = null; $("wa").classList.remove("aberta"); $("conv").style.display="none"; $("semconv").style.display=""; desenharLista(); };
+$("busca").oninput = desenharLista;
+document.querySelectorAll(".wa-filtros button").forEach(b => b.onclick = () => { filtro = b.dataset.f;
+  document.querySelectorAll(".wa-filtros button").forEach(x => x.setAttribute("aria-pressed", x===b ? "true":"false")); desenharLista(); });
+const ta = $("texto");
+ta.addEventListener("input", () => { ta.style.height="auto"; ta.style.height = Math.min(ta.scrollHeight,140)+"px"; });
+ta.addEventListener("keydown", e => { if (e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("form").requestSubmit(); } });
+$("form").onsubmit = async e => { e.preventDefault(); const t = ta.value.trim(); if (!t || !atual) return;
+  const btn = e.submitter || $("form").querySelector("button"); btn.disabled = true;
+  try { const fd = new FormData(); fd.append("jid", atual.jid); fd.append("texto", t);
+    const r = await fetch(B + "/whatsapp/enviar", {method:"POST", body:fd}); const d = await r.json();
+    if (d.erro) alert("Não enviou: " + d.erro); else { ta.value=""; ta.style.height="auto"; setTimeout(()=>carregarMsgs(true), 800); }
+  } catch(err){ alert("Não enviou: sem conexão com o painel."); } finally { btn.disabled = false; } };
+carregarLista(); setInterval(carregarLista, 8000); setInterval(()=>carregarMsgs(false), 5000);
+})();
+</script>
+{% endblock %}

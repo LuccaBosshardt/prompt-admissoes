@@ -270,15 +270,17 @@ def aprovar(b: Banco, cfg: dict, aid: int, agora: datetime, modo: str | None = N
         if modo not in ("remoto", "presencial"):
             return "escolha remoto ou presencial"
         cl = _ctx(b, cfg, p)["cliente"]
-        if modo == "remoto" and not (cl and cl.get("contrato_pdf")):
-            return "o cliente não tem modelo de contrato (PDF). Suba o PDF em Clientes."
         _fechar_acao(b, aid, "aprovada", agora, modo)
         b.atualizar(pid, contrato_modo=modo)
         b.exec("INSERT OR IGNORE INTO itens (pessoa_id, item, grupo) VALUES (?,?,?)", pid, ITEM_CONTRATO, "contrato")
-        if modo == "remoto":
+        if modo == "remoto" and cl and cl.get("contrato_pdf"):
             b.atualizar(pid, aguardando="pessoa", cobrancas=0)
             enviar(b, cfg, b.pessoa(pid), "Segue o seu contrato. Leia, assine e me mande aqui a foto ou o PDF "
-                   "de todas as páginas assinadas.", agora, arquivo=cl["contrato_pdf"])
+                   "de todas as páginas assinadas, por gentileza.", agora, arquivo=cl["contrato_pdf"])
+        elif modo == "remoto":  # contrato digital: o link sai pelo sistema de contratos da Prompt
+            b.atualizar(pid, aguardando="pessoa", cobrancas=0)
+            enviar(b, cfg, b.pessoa(pid), "O seu contrato foi enviado para o seu celular, por link. É só clicar no link "
+                   "e assinar. Quando assinar, me avise aqui (pode mandar um print), por gentileza.", agora)
         else:
             b.atualizar(pid, aguardando="equipe")
             enviar(b, cfg, b.pessoa(pid), "A assinatura do seu contrato vai ser presencial, na unidade da Prompt "
@@ -337,7 +339,7 @@ def recusar(b: Banco, cfg: dict, aid: int, motivo: str, agora: datetime) -> str:
 
 
 # ---------------- resultado do Hermes ----------------
-CHAVES_RESULTADO = {"mensagens", "dados", "documentos", "propor_exame", "compareceu", "propor_inicio",
+CHAVES_RESULTADO = {"mensagens", "dados", "documentos", "propor_exame", "compareceu", "propor_inicio", "contrato_assinado", "duvida_para_equipe",
                     "precisa_humano", "motivo_humano", "resumo"}
 
 
@@ -430,12 +432,23 @@ def aplicar_resultado(b: Banco, cfg: dict, pid, res: dict, agora: datetime, nova
             b.atualizar(pid, cobrancas=faltas)  # falta conta como tentativa
             oferecer_exame(b, cfg, b.pessoa(pid), agora, prefixo="Sem problema, vamos remarcar. ")
         feito.append("faltou ao exame")
+    if res.get("contrato_assinado") is True and p["etapa"] == "contrato" and p["contrato_modo"] == "remoto":
+        it = next((i for i in b.itens(pid) if i["item"] == ITEM_CONTRATO), None)
+        if it and it["status"] in ("pendente", "recusado"):
+            b.exec("UPDATE itens SET status='recebido', atualizado_em=? WHERE id=?", agora.isoformat(), it["id"])
+            criar_acao(b, pid, "contrato", {"item_id": it["id"]}, "A pessoa disse que assinou o contrato digital (confira no sistema de contratos)", agora)
+            b.atualizar(pid, aguardando="equipe")
+            feito.append("contrato digital assinado (a conferir)")
     if res.get("propor_inicio") and p["etapa"] == "inicio":
         d = regras.ler_data(str((res["propor_inicio"] or {}).get("data", "")), hoje)
         if d and hoje <= d <= hoje + timedelta(days=90):
             criar_acao(b, pid, "inicio", {"data": d.isoformat()}, f"Início {regras.fmt_data(d)}", agora)
             b.atualizar(pid, aguardando="equipe")
             feito.append(f"início proposto {d}")
+    if isinstance(res.get("duvida_para_equipe"), str) and res["duvida_para_equipe"].strip():
+        b.atualizar(pid, msg_nova=1)  # aparece em "Precisa de humano" sem tirar a pessoa do robô
+        b.log(pid, "duvida_para_equipe", res["duvida_para_equipe"].strip()[:300])
+        feito.append("dúvida para a equipe")
     if res.get("precisa_humano"):
         humano(b, pid, res.get("motivo_humano") or "o agente pediu uma pessoa")
         feito.append("precisa humano")

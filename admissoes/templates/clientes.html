@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block corpo %}
-<h1>Clientes e regras</h1><p class="sub">Cada cliente tem a sua lista de documentos, informações, clínica, texto inicial e contrato. Vale para os próximos cadastros.</p>
+<div class="cab"><div class="icbox">{{ ic("clientes", 22) }}</div><div><h1>Clientes e clínicas</h1><p>Regras de cada cliente: documentos, informações, clínica, texto inicial e contrato.</p></div></div>
 <div class="card"><form class="linha" method="post" action="{{b}}/clientes"><label>Novo cliente (copia a Aerovip)<input name="nome" required></label><button class="sec">Criar</button></form>
 <p>{% for c in lista %}<a class="tag" href="{{b}}/clientes?id={{c.id}}" style="margin-right:6px">{{c.nome}}</a>{% endfor %}</p></div>
 {% if atual %}<div class="card"><form method="post" action="{{b}}/clientes/{{atual.id}}" enctype="multipart/form-data">
@@ -11,7 +11,9 @@
 <div><p class="sub">A clínica da pessoa sai da coluna "clientes" da lista de clínicas (com mais de uma, vale a da cidade da pessoa). O campo abaixo é a reserva.</p>
 <p><label>Clínica do exame (reserva)<br><select name="clinica_id"><option value="">—</option>{% for c in clinicas %}<option value="{{c.id}}" {% if c.id==atual.clinica_id %}selected{% endif %}>{{c.nome}} · {{c.cidade}}</option>{% endfor %}</select></label></p>
 <p><label>Texto inicial (use {nome}, {funcao}, {assinatura}, {documentos}, {documentos_filhos}, {infos})<textarea name="texto_inicial" style="min-height:300px">{{atual.textos.get("inicial","")}}</textarea></label></p>
-<p><label>Contrato padrão deste cliente<br><select name="contrato_modo">{% for v,t in [("","a equipe escolhe"),("presencial","presencial (assina na unidade)"),("remoto","online (envia o PDF)")] %}<option value="{{v}}" {% if (atual.contrato_modo or "")==v %}selected{% endif %}>{{t}}</option>{% endfor %}</select></label></p>
+<p><label>Informações da vaga que o robô pode repetir ao candidato<textarea name="info_vaga" style="min-height:160px" placeholder="Ex.: Local de trabalho: Av. ..., Guarulhos. Horário: 08h–17h seg–sex, sáb 08h–15h. Levar marmita. Calçado fechado e calça confortável. VT: os 3 primeiros dias por conta da pessoa, depois a empresa ressarce; não reembolsamos aplicativo. Pagamento: vale dia 20, salário 5º dia útil.">{{atual.info_vaga or ""}}</textarea></label>
+<span class="sub">Só o que estiver aqui o robô repete (endereço, horário, refeição, uniforme, VT, salário/benefícios se a equipe quiser). O resto ele passa para a equipe.</span></p>
+<p><label>Contrato padrão deste cliente<br><select name="contrato_modo">{% for v,t in [("","a equipe escolhe"),("presencial","presencial (assina na unidade)"),("remoto","digital (link no celular, ou PDF se houver modelo)")] %}<option value="{{v}}" {% if (atual.contrato_modo or "")==v %}selected{% endif %}>{{t}}</option>{% endfor %}</select></label></p>
 <p><label>Modelo do contrato (PDF){% if atual.contrato_pdf %} · <a href="{{b}}/arquivo/contrato/{{atual.id}}" target="_blank">ver atual</a>{% else %} · <b>ainda sem contrato</b>{% endif %}<br><input type="file" name="contrato" accept="application/pdf"></label></p></div></div>
 <button>Salvar regras</button></form></div>{% endif %}
 <h2>Clínicas</h2>

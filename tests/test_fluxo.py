@@ -155,7 +155,6 @@ def test_fluxo_completo_ate_admitida_e_vaga_fecha(b, cfg, aerovip):
     motor.aprovar(b, cfg, a["id"], em("2026-11-27T15:10:00"))
     assert b.pessoa(p["id"])["etapa"] == "contrato"
     ec = b.um("SELECT * FROM acoes WHERE tipo='enviar_contrato' AND status='pendente'")
-    assert motor.aprovar(b, cfg, ec["id"], em("2026-11-27T15:11:00"), "remoto").startswith("o cliente não tem modelo")
     pdf = Path(cfg["dados_dir"]) / "arquivos" / "contrato.pdf"
     pdf.write_bytes(b"%PDF-1.4")
     b.exec("UPDATE clientes SET contrato_pdf=? WHERE id=?", str(pdf), aerovip)
