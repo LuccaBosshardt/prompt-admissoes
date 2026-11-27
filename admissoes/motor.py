@@ -90,7 +90,8 @@ def texto_inicial(cfg: dict, cl: dict, nome: str = "Maria", funcao: str = "") ->
     if not funcao:
         modelo = modelo.replace(" de {funcao}", "")
     try:
-        return modelo.format(nome=nome.split()[0].title(), funcao=funcao or "a vaga", assinatura=cfg["assinatura"],
+        return modelo.format(nome=nome.split()[0].title(), funcao=funcao or "a vaga",
+                             assinatura=config.ajustes(cfg)["assinatura"] or cfg["assinatura"],
                              documentos=_lista(cl["documentos"]), documentos_filhos=_lista(cl["documentos_filhos"]),
                              infos=_lista(i["rotulo"] for i in cl["infos"] if i["chave"] != "filhos_menores_14")
                              + "\n* Você tem filhos menores de 14 anos? Quantos?")

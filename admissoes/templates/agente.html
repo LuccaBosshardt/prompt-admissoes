@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% block corpo %}
+<h1>Agente e WhatsApp</h1>
+<div class="cols"><div>
+<div class="card"><h2 style="margin-top:0">1. WhatsApp do robô</h2>
+{% if est.erro %}<div class="aviso">{{est.erro}}</div>{% endif %}
+<p>Situação: <span id="sit" class="tag {{sit[1]}}">{{sit[0]}}</span>{% if est.numero %} · número <b id="num">{{est.numero}}</b>{% endif %}
+{% if est.sessao %} · webhook para o robô: {% if est.webhook %}<span class="tag ok">ligado</span>{% else %}<span class="tag er">faltando</span>{% endif %}{% endif %}</p>
+{% if est.status != 'CONNECTED' %}
+<p class="sub">Use um chip só do robô, nunca o número comercial da Prompt. Depois de clicar, abra no celular do robô: WhatsApp → Aparelhos conectados → Conectar aparelho, e leia o QR abaixo.</p>
+<form method="post" action="{{b}}/agente/conectar" style="display:inline"><button>{% if est.sessao %}Conferir conexão e webhook{% else %}Conectar WhatsApp (gerar QR){% endif %}</button></form>
+{% if est.sessao %}<form method="post" action="{{b}}/agente/reiniciar" style="display:inline"><button class="sec">Gerar QR novo</button></form>{% endif %}
+<div id="qrbox" style="margin-top:14px;min-height:40px" class="sub">{% if est.sessao %}Buscando o QR…{% endif %}</div>
+{% else %}
+<p class="sub">Conectado. Para trocar de número, fale com o suporte técnico (desligar o aparelho é feito no celular).</p>
+<form method="post" action="{{b}}/agente/conectar"><button class="sec">Conferir webhook</button></form>
+{% endif %}
+</div>
+<div class="card"><h2 style="margin-top:0">2. Envio de mensagens</h2>
+<p>Envio: {% if chaves.envio_ligado %}<span class="tag ok">LIGADO: o robô manda mensagens de verdade</span>{% else %}<span class="tag al">desligado (modo seco)</span>{% endif %}</p>
+<form method="post" action="{{b}}/agente/chaves" class="linha">
+{% if chaves.envio_ligado %}<button class="no" name="envio" value="0" onclick="return confirm('Desligar o envio? Nada mais sai no WhatsApp.')">Desligar envio</button>
+{% else %}<button class="ok" name="envio" value="1" onclick="return confirm('Ligar o envio? O robô passa a falar de verdade com os candidatos.')">Ligar envio</button>{% endif %}
+{% if chaves.cobranca_ligada %}<button class="sec" name="cobranca" value="0">Desligar cobranças automáticas</button>{% else %}<button class="sec" name="cobranca" value="1">Ligar cobranças automáticas</button>{% endif %}
+</form>
+<p class="sub">Cobranças: até 3 por etapa (24, 48 e 72 h), de segunda a sábado, das 8h às 21h. Ao ligar o envio, o relógio das cobranças começa do zero. Desligar vale na hora.</p>
+</div></div>
+<div><div class="card"><h2 style="margin-top:0">3. Agente Hermes</h2>
+<p class="sub">Modelo <b>{{perfil.default or "?"}}</b> · provedor <b>{{perfil.provider or "?"}}</b> (assinatura, sem custo por mensagem) · reserva: {{perfil.fallback_providers or "?"}}{% if perfil.erro %} · <span class="tag er">{{perfil.erro}}</span>{% endif %}</p>
+<form method="post" action="{{b}}/agente/ajustes">
+<p><label>Nome com que o robô se apresenta<br><input name="assinatura" value="{{aj.assinatura}}" size="45" maxlength="80"></label></p>
+<p><label>Orientações da equipe para o robô (opcional)<textarea name="instrucoes_extra" placeholder="Ex.: Para a Aerovip, lembre que o uniforme é entregue no primeiro dia.">{{aj.instrucoes_extra}}</textarea></label></p>
+<p class="sub">As regras fixas (nunca prometer salário, nunca pedir senha, quem aprova é a equipe) continuam valendo.</p>
+<button>Salvar ajustes</button></form></div>
+<div class="card"><h2 style="margin-top:0">4. Testar o agente</h2>
+<p class="sub">Converse como se fosse um candidato. Usa o Hermes de verdade, mas nada é gravado nem enviado. Leva uns 15 segundos.</p>
+<form method="post" action="{{b}}/agente/testar" onsubmit="this.querySelector('button').textContent='Pensando…'">
+<p><label>Etapa<br><select name="etapa">{% for e in ETAPAS %}<option value="{{e}}" {% if teste and teste.etapa==e %}selected{% endif %}>{{NOME_ETAPA[e]}}</option>{% endfor %}</select></label></p>
+<p><label>Mensagem do candidato<input name="texto" required style="width:100%" value="{{teste.pergunta if teste else 'oi, recebi a mensagem. quanto vou ganhar?'}}"></label></p>
+<button>Testar</button></form>
+{% if teste %}<div style="margin-top:12px">{% if teste.erro %}<div class="aviso">Erro: {{teste.erro}}</div>{% else %}
+<div class="chat"><div class="m pessoa">{{teste.pergunta}}</div>{% for t in teste.mensagens %}<div class="m sistema">{{t}}</div>{% else %}<div class="sub">(o robô não mandaria mensagem)</div>{% endfor %}</div>
+<details><summary class="sub">ver o que o robô faria no sistema (JSON)</summary><pre style="white-space:pre-wrap;font-size:12px">{{teste.json}}</pre></details>{% endif %}</div>{% endif %}
+</div></div></div>
+<h2>Últimas ações do agente</h2>
+<table><tr><th>Quando</th><th>Pessoa</th><th>O quê</th></tr>{% for l in logs %}<tr><td class="sub">{{l.em|dt}}</td><td>{{l.nome or ""}}</td><td><b>{{l.tipo}}</b> {{l.detalhe[:200]}}</td></tr>{% else %}<tr><td colspan="3" class="sub">Nada ainda.</td></tr>{% endfor %}</table>
+{% if est.sessao and est.status != 'CONNECTED' %}
+<script>
+async function qr(){ try{ const r=await fetch("{{b}}/agente/qr.json"); const d=await r.json(); const box=document.getElementById('qrbox'); const sit=document.getElementById('sit');
+  sit.textContent=d.rotulo||d.status;
+  if(d.status==='CONNECTED'||d.conectado){ box.innerHTML='<b style="color:#1b7f4b">Conectado! Recarregando…</b>'; setTimeout(()=>location.reload(),1500); return; }
+  if(d.base64){ box.innerHTML='<img alt="QR do WhatsApp" style="width:260px;height:260px;border:1px solid #dfe4ee;border-radius:10px" src="'+d.base64+'"><div class="sub">O QR muda a cada ~20 s. Esta tela atualiza sozinha.</div>'; }
+  else { box.textContent=d.erro||d.aguarde||'Aguardando o QR…'; }
+ }catch(e){} setTimeout(qr,4000); }
+qr();
+</script>{% endif %}
+{% endblock %}

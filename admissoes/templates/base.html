@@ -36,9 +36,9 @@ img.doc{max-width:240px;max-height:240px;border-radius:8px;border:1px solid var(
 <header><div class="top"><a class="marca" href="{{b}}/">Prompt Admissões</a>
 <nav><a href="{{b}}/pessoas">Pessoas</a><a href="{{b}}/aprovacoes">Aprovações{% if cont.aprov %}<span class="badge">{{cont.aprov}}</span>{% endif %}</a>
 <a href="{{b}}/humano">Precisa de humano{% if cont.humano %}<span class="badge">{{cont.humano}}</span>{% endif %}</a>
-<a href="{{b}}/vagas">Vagas</a><a href="{{b}}/estoque">Estoque</a><a href="{{b}}/clientes">Clientes</a><a href="{{b}}/saida">Caixa de saída</a></nav></div></header>
+<a href="{{b}}/vagas">Vagas</a><a href="{{b}}/estoque">Estoque</a><a href="{{b}}/clientes">Clientes</a><a href="{{b}}/saida">Caixa de saída</a><a href="{{b}}/agente">Agente e WhatsApp</a></nav></div></header>
 <main>
-{% if not envio_ligado %}<div class="aviso">Modo seco: o WhatsApp ainda não está ligado. As mensagens ficam na <a href="{{b}}/saida">caixa de saída</a> e não saem.</div>{% endif %}
+{% if not envio_ligado %}<div class="aviso">Modo seco: o envio está desligado. As mensagens ficam na <a href="{{b}}/saida">caixa de saída</a> e não saem. Ligue em <a href="{{b}}/agente">Agente e WhatsApp</a>.</div>{% endif %}
 {% if msg %}<div class="flash">{{msg}}</div>{% endif %}
 {% block corpo %}{% endblock %}
 </main></body></html>

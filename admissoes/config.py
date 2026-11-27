@@ -41,6 +41,24 @@ def chaves(cfg: dict) -> dict:
     return out
 
 
+def ajustes(cfg: dict) -> dict:
+    """Ajustes do agente editados na aba 'Agente e WhatsApp' (dados_dir/ajustes.json)."""
+    out = {"assinatura": cfg.get("assinatura", ""), "instrucoes_extra": ""}
+    try:
+        out.update(json.loads((Path(cfg["dados_dir"]) / "ajustes.json").read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+def salvar_json(cfg: dict, nome: str, dados: dict) -> None:
+    """Grava dados_dir/<nome> de forma atômica (o vigia da ponte pode ler ao mesmo tempo)."""
+    p = Path(cfg["dados_dir"]) / nome
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(dados, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(p)
+
+
 def segredo(cfg: dict, nome: str) -> str:
     """Lê (ou cria, ≥32 chars aleatórios, chmod 600) um segredo em dados_dir. Nunca imprime."""
     p = Path(cfg["dados_dir"]) / f"{nome}.txt"

@@ -93,7 +93,9 @@ def receber(b: Banco, cfg: dict, tel: str, jid: str, nome_wa: str, texto: str, t
         p = b.pessoa(pid)
         b.exec("INSERT INTO mensagens (pessoa_id, telefone, quem, texto, tipo, arquivo, key_id, processada, em) "
                "VALUES (?,?,?,?,?,?,?,1,?)", pid, tel, "pessoa", texto, tipo, arquivo, key_id, agora.isoformat())
-        motor.enviar(b, cfg, p, RESPOSTA_SEM_CADASTRO.format(assinatura=cfg["assinatura"]), agora, pedido=False)
+        from .config import ajustes
+        motor.enviar(b, cfg, p, RESPOSTA_SEM_CADASTRO.format(assinatura=ajustes(cfg)["assinatura"] or cfg["assinatura"]),
+                     agora, pedido=False)
         return "sem cadastro"
     if jid and p["jid"] != jid:
         b.atualizar(p["id"], jid=jid)  # o WhatsApp manda o JID real (com ou sem o 9)

@@ -13,7 +13,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import clinicas, config, motor, regras, whatsapp
+from . import agente, clinicas, config, gateway, motor, regras, whatsapp
 from .banco import Banco
 
 CFG = config.carregar()
@@ -370,6 +370,132 @@ def clinica_nova(seg: str, nome: str = Form(...), cidade: str = Form(""), endere
     BANCO.exec("INSERT INTO clinicas (nome, cidade, endereco, dias, inicio, fim, orientacoes, origem, chave) VALUES (?,?,?,?,?,?,?,?,?)",
                nome, cidade, endereco, clinicas._dias(dias), inicio, fim, orientacoes, "painel", f"painel:{uuid.uuid4().hex[:8]}")
     return _ir(seg, "/clientes", "Clínica criada.")
+
+
+# ---------------- agente e WhatsApp ----------------
+SITUACAO = {"CONNECTED": ("conectado", "ok"), "SCAN_QR": ("esperando a leitura do QR", "al"),
+            "DISCONNECTED": ("desconectado", "er"), "STOPPED": ("parado", "er"), "LOGGED_OUT": ("número desligado do aparelho", "er"),
+            "FAILED": ("falhou", "er"), "sem sessão": ("ainda não conectado", "al")}
+
+
+def _perfil_hermes() -> dict:
+    out = {}
+    try:
+        for ln in (config.PERFIL_DIR / "config.yaml").read_text(encoding="utf-8").splitlines():
+            ln = ln.strip()
+            for k in ("default", "provider", "base_url", "fallback_providers"):
+                if ln.startswith(k + ":"):
+                    out.setdefault(k, ln.split(":", 1)[1].strip())
+    except OSError:
+        out["erro"] = "perfil promptadmissoes não encontrado"
+    return out
+
+
+@app.get("/p/{seg}/agente", response_class=HTMLResponse)
+def agente_tela(req: Request, seg: str, teste: str = ""):
+    _ok(seg)
+    est = gateway.estado(CFG)
+    return _r(req, seg, "agente.html", est=est, sit=SITUACAO.get(est["status"], (est["status"], "")),
+              chaves=config.chaves(CFG), aj=config.ajustes(CFG), perfil=_perfil_hermes(),
+              logs=BANCO.todos("SELECT l.*, p.nome FROM log l LEFT JOIN pessoas p ON p.id=l.pessoa_id WHERE l.tipo IN "
+                               "('hermes','erro_hermes','erro_turno','erro_envio','hermes_descartado') ORDER BY l.id DESC LIMIT 12"),
+              teste=None)
+
+
+@app.get("/p/{seg}/agente/qr.json")
+def agente_qr(seg: str):
+    _ok(seg)
+    est = gateway.estado(CFG)
+    out = {"status": est["status"], "rotulo": SITUACAO.get(est["status"], (est["status"], ""))[0], "numero": est["numero"],
+           "erro": est["erro"]}
+    if est["sessao"] and est["status"] != "CONNECTED":
+        try:
+            out.update(gateway.qr(CFG))
+        except gateway.GatewayErro as e:
+            out["erro"] = str(e)
+    return out
+
+
+@app.post("/p/{seg}/agente/conectar")
+def agente_conectar(seg: str):
+    _ok(seg)
+    try:
+        feito = gateway.conectar(CFG)
+    except gateway.GatewayErro as e:
+        return _ir(seg, "/agente", f"Não consegui: {e}")
+    return _ir(seg, "/agente", "Pronto: " + ", ".join(feito) + ". Leia o QR com o celular do robô.")
+
+
+@app.post("/p/{seg}/agente/reiniciar")
+def agente_reiniciar(seg: str):
+    _ok(seg)
+    try:
+        return _ir(seg, "/agente", gateway.reiniciar(CFG))
+    except gateway.GatewayErro as e:
+        return _ir(seg, "/agente", f"Não consegui: {e}")
+
+
+@app.post("/p/{seg}/agente/chaves")
+def agente_chaves(seg: str, envio: str = Form(""), cobranca: str = Form("")):
+    _ok(seg)
+    ch = config.chaves(CFG)
+    msg = "Ajuste salvo."
+    if envio in ("1", "0"):
+        ligar = envio == "1"
+        if ligar and not ch.get("envio_ligado"):
+            if gateway.estado(CFG)["status"] != "CONNECTED":
+                return _ir(seg, "/agente", "Conecte o WhatsApp antes de ligar o envio.")
+            # quem foi cadastrado em modo seco não recebe cobrança atrasada em massa
+            BANCO.exec("UPDATE pessoas SET pedido_em=?, ultima_cobranca=NULL, cobrancas=0 WHERE status='ativo'", _agora().isoformat())
+            msg = "Envio LIGADO: o robô passa a mandar mensagens de verdade. O relógio das cobranças foi zerado."
+        elif not ligar:
+            msg = "Envio DESLIGADO: modo seco, nada sai no WhatsApp."
+        ch["envio_ligado"] = ligar
+    if cobranca in ("1", "0"):
+        ch["cobranca_ligada"] = cobranca == "1"
+        msg = "Cobranças automáticas " + ("ligadas." if ch["cobranca_ligada"] else "desligadas.")
+    config.salvar_json(CFG, "chaves.json", {k: v for k, v in ch.items() if k in ("envio_ligado", "cobranca_ligada")})
+    BANCO.log(None, "chaves", json.dumps(config.chaves(CFG)))
+    return _ir(seg, "/agente", msg)
+
+
+@app.post("/p/{seg}/agente/ajustes")
+def agente_ajustes(seg: str, assinatura: str = Form(""), instrucoes_extra: str = Form("")):
+    _ok(seg)
+    assinatura = " ".join(assinatura.split())[:80]
+    if not assinatura:
+        return _ir(seg, "/agente", "A assinatura não pode ficar vazia.")
+    config.salvar_json(CFG, "ajustes.json", {"assinatura": assinatura, "instrucoes_extra": instrucoes_extra.strip()[:3000]})
+    return _ir(seg, "/agente", "Ajustes do agente salvos. Valem na próxima mensagem.")
+
+
+@app.post("/p/{seg}/agente/testar", response_class=HTMLResponse)
+def agente_testar(req: Request, seg: str, texto: str = Form(...), etapa: str = Form("documentos")):
+    """Conversa de teste com o Hermes real: candidato fictício, nada é gravado nem enviado."""
+    _ok(seg)
+    cl = BANCO.cliente(BANCO.um("SELECT id FROM clientes ORDER BY id LIMIT 1")["id"])
+    agora = _agora()
+    etapa = etapa if etapa in motor.ETAPAS else "documentos"
+    ev = {"agora": f"{regras.DIAS[agora.weekday()]}, {agora:%d/%m/%Y %H:%M}", "pessoa": {"nome": "Candidato Teste", "funcao": "Auxiliar", "cidade": ""},
+          "cliente": cl["nome"], "vaga": None, "etapa": etapa,
+          "itens": [{"item": d, "tipo": "doc", "descricao": d, "status": "pendente", "motivo_recusa": None} for d in cl["documentos"]]
+          + [{"item": i["chave"], "tipo": "info", "descricao": i["rotulo"], "status": "pendente", "motivo_recusa": None} for i in cl["infos"]],
+          "infos_aceitas": [i["chave"] for i in cl["infos"]],
+          "opcoes_exame": [d.isoformat() for d in regras.opcoes_exame(CFG, agora.date(), None)] if etapa == "exame" else [],
+          "clinica_do_exame": None, "exame": None, "aguardando_equipe": [], "historico": [],
+          "novas_mensagens": [{"msg_id": 1, "tipo": "TEXT", "texto": texto[:1000], "anexo": False}]}
+    try:
+        res = agente.responder(ev, CFG)
+        teste = {"pergunta": texto, "etapa": etapa, "mensagens": motor._msgs_limpas(res.get("mensagens")),
+                 "json": json.dumps(res, ensure_ascii=False, indent=1)}
+    except agente.HermesFalhou as e:
+        teste = {"pergunta": texto, "etapa": etapa, "erro": str(e)}
+    est = gateway.estado(CFG)
+    return _r(req, seg, "agente.html", est=est, sit=SITUACAO.get(est["status"], (est["status"], "")),
+              chaves=config.chaves(CFG), aj=config.ajustes(CFG), perfil=_perfil_hermes(),
+              logs=BANCO.todos("SELECT l.*, p.nome FROM log l LEFT JOIN pessoas p ON p.id=l.pessoa_id WHERE l.tipo IN "
+                               "('hermes','erro_hermes','erro_turno','erro_envio','hermes_descartado') ORDER BY l.id DESC LIMIT 12"),
+              teste=teste)
 
 
 # ---------------- caixa de saída ----------------
